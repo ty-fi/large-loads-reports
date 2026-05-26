@@ -16,6 +16,7 @@ ROOT = SCRIPT_DIR.parent / "index.html"
 
 df_proj = pd.read_csv(COMBINED_DIR / "pipeline_projects.csv")
 df_changes = pd.read_csv(COMBINED_DIR / "pipeline_changes.csv")
+df_changes["net_mw"] = df_changes["added_mw"].fillna(0) - df_changes["removed_mw"].fillna(0)
 
 LOAD_COLS = [c for c in df_proj.columns if c.startswith("load_")]
 ID_COLS = [
@@ -38,7 +39,8 @@ QUARTER_ORDER = [
     "2024Q1", "2024Q2", "2024Q3", "2024Q4",
     "2025Q1", "2025Q2", "2025Q3", "2025Q4", "2026Q1",
 ]
-QUARTERS_PRESENT = [q for q in QUARTER_ORDER if q in df_long["report_quarter"].unique()]
+QUARTERS_PRESENT_ALL = [q for q in QUARTER_ORDER if q in df_long["report_quarter"].unique()]
+QUARTERS_PRESENT = [q for q in QUARTER_ORDER if q in df_long["report_quarter"].unique() and q != "2024Q1"]
 ALL_YEARS = sorted(int(y) for y in df_long["planning_year"].unique())
 ALL_SEGMENTS = sorted(s for s in df_long["segment"].dropna().unique().tolist() if s)
 ALL_STAGES = ["Technical Review", "Request for Service", "Contract for Electric Service"]
@@ -61,9 +63,9 @@ df_added = _PROJ_FLOW[
 ].copy()
 
 _removed_rows = []
-for i in range(1, len(QUARTERS_PRESENT)):
-    prev_q = QUARTERS_PRESENT[i - 1]
-    curr_q = QUARTERS_PRESENT[i]
+for i in range(1, len(QUARTERS_PRESENT_ALL)):
+    prev_q = QUARTERS_PRESENT_ALL[i - 1]
+    curr_q = QUARTERS_PRESENT_ALL[i]
     prev_ids = set(df_proj[df_proj["report_quarter"] == prev_q]["proj_id"])
     curr_ids = set(df_proj[df_proj["report_quarter"] == curr_q]["proj_id"])
     gone = prev_ids - curr_ids
@@ -138,46 +140,46 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg: #f5f6fa;
+    --bg: #f8fafc;
     --surface: #ffffff;
-    --border: #e2e6ea;
-    --text: #1a2332;
-    --muted: #6b7a8d;
-    --accent: #1d4ed8;
-    --tab-active: #1a1a2e;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --muted: #475569;
+    --accent: #2563eb;
+    --accent-light: #eff6ff;
   }
-  html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; background: var(--bg); color: var(--text); }
+  html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
 
   /* Header */
   header {
     background: var(--surface);
-    border-bottom: 2px solid #e8e8e8;
-    padding: 20px 30px 16px;
+    border-bottom: 1px solid var(--border);
+    padding: 24px 30px 20px;
   }
-  header h1 { font-size: 22px; font-weight: 700; color: #1a1a2e; margin: 0; }
-  header p { margin: 4px 0 0; color: #666; font-size: 13px; }
+  header h1 { font-size: 24px; font-weight: 700; color: var(--text); margin: 0; letter-spacing: -0.5px; }
+  header p { margin: 6px 0 0; color: var(--muted); font-size: 13.5px; }
 
   /* Tabs */
   .tab-bar {
     display: flex;
-    gap: 4px;
+    gap: 16px;
     background: var(--surface);
     padding: 0 30px;
     border-bottom: 1px solid var(--border);
   }
   .tab-btn {
-    padding: 12px 18px;
-    font-size: 13px;
-    font-weight: 600;
+    padding: 14px 4px;
+    font-size: 13.5px;
+    font-weight: 500;
     color: var(--muted);
     background: none;
     border: none;
     border-bottom: 2px solid transparent;
     cursor: pointer;
-    transition: color .15s, border-color .15s;
+    transition: all 0.15s ease-in-out;
   }
-  .tab-btn:hover { color: var(--text); }
-  .tab-btn.active { color: var(--tab-active); border-bottom-color: var(--tab-active); }
+  .tab-btn:hover { color: var(--accent); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
 
   /* Content */
   .tab-content { display: none; padding: 24px 30px; }
@@ -186,54 +188,115 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   /* Cards */
   .card {
     background: var(--surface);
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 1px 4px rgba(0,0,0,.1);
-    margin-bottom: 20px;
+    border-radius: 12px;
+    padding: 24px;
+    border: 1px solid var(--border);
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
+    margin-bottom: 24px;
   }
 
   /* Controls */
   .controls-row { display: flex; gap: 24px; flex-wrap: wrap; }
   .control-group { min-width: 180px; }
-  .control-label { font-weight: 600; font-size: 13px; margin-bottom: 6px; color: #444; }
-  .control-group label { display: block; font-size: 13px; margin-bottom: 3px; cursor: pointer; }
-  .control-group select, .control-group input[type="text"] {
-    width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px;
+  .control-label { font-weight: 600; font-size: 13px; margin-bottom: 8px; color: var(--text); text-transform: uppercase; letter-spacing: 0.5px; }
+  
+  .control-group label {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 12.5px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    line-height: 1.4;
+    color: #334155;
+    padding: 4px 6px;
+    border-radius: 6px;
+    transition: background-color 0.15s;
   }
-  .toggle-links { font-size: 11px; margin-bottom: 6px; }
-  .toggle-links span { cursor: pointer; color: #5B8DB8; margin-right: 8px; }
-  .toggle-links span:hover { text-decoration: underline; }
+  .control-group label:hover {
+    background-color: #f1f5f9;
+  }
+  .control-group input[type="checkbox"], .control-group input[type="radio"] {
+    margin-top: 3px;
+    accent-color: var(--accent);
+  }
 
-  /* Range slider */
-  .range-wrap { display: flex; align-items: center; gap: 10px; }
-  .range-wrap input[type="range"] { flex: 1; }
-  .range-wrap .range-label { font-size: 12px; color: var(--muted); min-width: 30px; text-align: center; }
+  .control-group select, .control-group input[type="text"] {
+    width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13.5px;
+    background: var(--surface); color: var(--text); outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .control-group select:focus, .control-group input[type="text"]:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light);
+  }
 
-  /* Radio */
-  .radio-group label { display: inline-block; margin-right: 20px; margin-bottom: 4px; }
+  .toggle-links { font-size: 11px; margin-bottom: 8px; display: flex; gap: 8px; }
+  .toggle-links span { cursor: pointer; color: var(--accent); font-weight: 500; padding: 2px 6px; border-radius: 4px; background: var(--accent-light); transition: background-color 0.15s; }
+  .toggle-links span:hover { background-color: #dbeafe; }
+
+  /* Radio pill group */
+  .radio-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .radio-group label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    background: #f1f5f9;
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+    user-select: none;
+    color: var(--muted);
+  }
+  .radio-group label:hover {
+    background: #e2e8f0;
+    color: var(--text);
+  }
+  .radio-group label:has(input:checked) {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .radio-group input {
+    accent-color: var(--accent);
+  }
 
   /* Chart area */
-  .chart-area { display: flex; gap: 20px; }
-  .chart-sidebar { width: 240px; flex-shrink: 0; }
+  .chart-area { display: flex; gap: 24px; }
+  .chart-sidebar { width: 300px; flex-shrink: 0; }
   .chart-main { flex: 1; min-width: 0; }
-  .chart-subtitle { font-size: 14px; color: #555; margin-bottom: 12px; }
+  .chart-subtitle { font-size: 14.5px; font-weight: 500; color: var(--muted); margin-bottom: 16px; background: #f1f5f9; padding: 10px 16px; border-radius: 8px; display: inline-block; }
 
   /* Table */
-  .table-wrap { overflow-x: auto; }
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: inset 0 0 2px rgba(0,0,0,0.02);
+  }
   table.data-table {
-    width: 100%; border-collapse: collapse; font-size: 12px;
+    width: 100%; border-collapse: collapse; font-size: 12.5px;
   }
   table.data-table th {
-    background: #f0f2f5; font-weight: bold; padding: 8px 12px;
+    background: #f8fafc; font-weight: 600; padding: 10px 14px;
     text-align: left; border-bottom: 2px solid var(--border); cursor: pointer; white-space: nowrap;
+    color: var(--muted); transition: background-color 0.15s; user-select: none;
   }
-  table.data-table th:hover { background: #e4e7ec; }
-  table.data-table td { padding: 6px 12px; border-bottom: 1px solid var(--border); }
-  table.data-table tr:hover { background: #f8f9fb; }
-  table.data-table .num { text-align: right; }
+  table.data-table th:hover { background: #f1f5f9; color: var(--text); }
+  table.data-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: #334155; }
+  table.data-table tr:last-child td { border-bottom: none; }
+  table.data-table tr:hover { background: #f8fafc; }
+  table.data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 
   /* Responsive */
-  @media (max-width: 768px) {
+  @media (max-width: 992px) {
     .chart-area { flex-direction: column; }
     .chart-sidebar { width: 100%; }
     .tab-content { padding: 16px; }
@@ -299,16 +362,17 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
           <div class="control-label">Pipeline Stages</div>
           <div id="evo-stages"></div>
         </div>
-        <div style="margin-top:12px">
+        <div style="margin-top:12px" class="control-group">
           <div class="control-label">Planning Years</div>
-          <div class="range-wrap">
-            <span class="range-label" id="evo-year-min"></span>
-            <input type="range" id="evo-year-lo" min="" max="">
-            <input type="range" id="evo-year-hi" min="" max="">
-            <span class="range-label" id="evo-year-max"></span>
-          </div>
-          <div style="text-align:center;font-size:12px;color:var(--muted);margin-top:4px">
-            <span id="evo-year-lo-val"></span> &ndash; <span id="evo-year-hi-val"></span>
+          <div style="display:flex; gap:8px;">
+            <div style="flex:1;">
+              <div style="font-size:11px; color:var(--muted); margin-bottom:2px;">From</div>
+              <select id="evo-year-lo"></select>
+            </div>
+            <div style="flex:1;">
+              <div style="font-size:11px; color:var(--muted); margin-bottom:2px;">To</div>
+              <select id="evo-year-hi"></select>
+            </div>
           </div>
         </div>
         <div style="margin-top:12px">
@@ -748,7 +812,9 @@ function buildTable(containerId, rows, cols) {
   const numCols = new Set(['announced_load_mw','project_age','added_projects','added_mw','removed_projects','removed_mw','net_mw','load_change_net_mw','stage_changes_count','avg_delay_months']);
 
   let html = '<table class="data-table"><thead><tr>';
-  cols.forEach(c => { html += `<th data-col="${c}">${displayNames[c] || c}</th>`; });
+  cols.forEach(c => {
+    html += `<th data-col="${c}">${displayNames[c] || c} <span class="sort-arrow" style="opacity:0.3; font-size:10px; margin-left:4px;">↕</span></th>`;
+  });
   html += '</tr></thead><tbody>';
   rows.forEach(r => {
     html += '<tr>';
@@ -772,18 +838,39 @@ function buildTable(containerId, rows, cols) {
 
   // Column sorting
   document.querySelectorAll(`#${containerId} th`).forEach(th => {
-    th.style.cursor = 'pointer';
     th.addEventListener('click', () => {
       const col = th.dataset.col;
       const tbody = th.closest('table').querySelector('tbody');
       const rowsArr = Array.from(tbody.querySelectorAll('tr'));
       const asc = th.dataset.asc !== 'true';
+
+      // Reset all headers
+      th.closest('tr').querySelectorAll('th').forEach(sibling => {
+        if (sibling !== th) {
+          sibling.dataset.asc = '';
+          const arrow = sibling.querySelector('.sort-arrow');
+          if (arrow) { arrow.textContent = '↕'; arrow.style.opacity = '0.3'; }
+        }
+      });
+
       th.dataset.asc = asc;
+      const arrow = th.querySelector('.sort-arrow');
+      if (arrow) {
+        arrow.textContent = asc ? '▲' : '▼';
+        arrow.style.opacity = '1';
+        arrow.style.color = 'var(--accent)';
+      }
+
       rowsArr.sort((a, b) => {
-        const va = a.children[th.cellIndex].textContent.trim();
-        const vb = b.children[th.cellIndex].textContent.trim();
-        const na = parseFloat(va), nb = parseFloat(vb);
-        if (!isNaN(na) && !isNaN(nb)) return asc ? na - nb : nb - na;
+        let va = a.children[th.cellIndex].textContent.replace(/[↕▲▼]/g, '').trim();
+        let vb = b.children[th.cellIndex].textContent.replace(/[↕▲▼]/g, '').trim();
+        
+        // Strip commas and non-numeric chars for numbers
+        if (numCols.has(col)) {
+          const na = parseFloat(va.replace(/,/g, ''));
+          const nb = parseFloat(vb.replace(/,/g, ''));
+          if (!isNaN(na) && !isNaN(nb)) return asc ? na - nb : nb - na;
+        }
         return asc ? va.localeCompare(vb) : vb.localeCompare(va);
       });
       rowsArr.forEach(tr => tbody.appendChild(tr));
@@ -807,19 +894,23 @@ buildCheckboxes('evo-segments', SEGMENTS, SEGMENTS, renderEvolution);
 const yrMin = YEARS[0], yrMax = YEARS[YEARS.length - 1];
 const yrLo = document.getElementById('evo-year-lo');
 const yrHi = document.getElementById('evo-year-hi');
-yrLo.min = yrMin; yrLo.max = yrMax; yrLo.value = Math.max(2026, yrMin);
-yrHi.min = yrMin; yrHi.max = yrMax; yrHi.value = Math.min(2032, yrMax);
-document.getElementById('evo-year-min').textContent = yrMin;
-document.getElementById('evo-year-max').textContent = yrMax;
-function updateYearLabels() {
-  const lo = parseInt(yrLo.value), hi = parseInt(yrHi.value);
-  if (lo > hi) { yrLo.value = hi; yrHi.value = lo; }
-  document.getElementById('evo-year-lo-val').textContent = Math.min(parseInt(yrLo.value), parseInt(yrHi.value));
-  document.getElementById('evo-year-hi-val').textContent = Math.max(parseInt(yrLo.value), parseInt(yrHi.value));
+
+// Populate select options
+yrLo.innerHTML = YEARS.map(y => `<option value="${y}" ${y === Math.max(2026, yrMin) ? 'selected' : ''}>${y}</option>`).join('');
+yrHi.innerHTML = YEARS.map(y => `<option value="${y}" ${y === Math.min(2032, yrMax) ? 'selected' : ''}>${y}</option>`).join('');
+
+function updateYears() {
+  let lo = parseInt(yrLo.value), hi = parseInt(yrHi.value);
+  if (lo > hi) {
+    // swap them so min <= max
+    const tmp = yrLo.value;
+    yrLo.value = yrHi.value;
+    yrHi.value = tmp;
+  }
+  renderEvolution();
 }
-yrLo.addEventListener('input', () => { updateYearLabels(); renderEvolution(); });
-yrHi.addEventListener('input', () => { updateYearLabels(); renderEvolution(); });
-updateYearLabels();
+yrLo.addEventListener('change', updateYears);
+yrHi.addEventListener('change', updateYears);
 
 document.querySelectorAll('input[name="evo-agg"]').forEach(el => el.addEventListener('change', renderEvolution));
 document.getElementById('evo-all').addEventListener('click', () => { setAll('evo-quarters', true); renderEvolution(); });
