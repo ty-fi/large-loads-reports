@@ -198,23 +198,33 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   /* Controls */
   .controls-row { display: flex; gap: 24px; flex-wrap: wrap; }
   .control-group { min-width: 180px; }
-  .control-label { font-weight: 600; font-size: 13px; margin-bottom: 8px; color: var(--text); text-transform: uppercase; letter-spacing: 0.5px; }
+  .control-label {
+    font-weight: 600; font-size: 11px; margin-bottom: 10px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.8px;
+  }
+  .control-section {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .control-section:first-child { margin-top: 0; padding-top: 0; border-top: none; }
   
-  .control-group label {
+  .control-section label, .control-group label {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    font-size: 12.5px;
-    margin-bottom: 6px;
+    gap: 10px;
+    font-size: 13px;
+    margin-bottom: 2px;
     cursor: pointer;
-    line-height: 1.4;
+    line-height: 1.5;
     color: #334155;
-    padding: 4px 6px;
+    padding: 7px 10px;
     border-radius: 6px;
-    transition: background-color 0.15s;
+    transition: background-color 0.15s, color 0.15s;
   }
-  .control-group label:hover {
+  .control-section label:hover, .control-group label:hover {
     background-color: #f1f5f9;
+    color: var(--text);
   }
   .control-group input[type="checkbox"], .control-group input[type="radio"] {
     margin-top: 3px;
@@ -326,11 +336,11 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
           <div class="control-label">Report Quarter</div>
           <select id="snap-quarter"></select>
         </div>
-        <div style="margin-top:12px">
+        <div class="control-section">
           <div class="control-label">Pipeline Stages</div>
           <div id="snap-stages"></div>
         </div>
-        <div style="margin-top:12px">
+        <div class="control-section">
           <div class="control-label">Segments</div>
           <div class="toggle-links"><span id="snap-seg-all">All</span><span id="snap-seg-none">None</span></div>
           <div id="snap-segments"></div>
@@ -358,11 +368,11 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
           <div class="toggle-links"><span id="evo-all">All</span><span id="evo-none">None</span></div>
           <div id="evo-quarters"></div>
         </div>
-        <div style="margin-top:12px">
+        <div class="control-section">
           <div class="control-label">Pipeline Stages</div>
           <div id="evo-stages"></div>
         </div>
-        <div style="margin-top:12px" class="control-group">
+        <div class="control-section" class="control-group">
           <div class="control-label">Planning Years</div>
           <div style="display:flex; gap:8px;">
             <div style="flex:1;">
@@ -375,14 +385,14 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
             </div>
           </div>
         </div>
-        <div style="margin-top:12px">
+        <div class="control-section">
           <div class="control-label">Show stages</div>
           <div class="radio-group">
             <label><input type="radio" name="evo-agg" value="sum" checked> Combined (sum all selected)</label>
             <label><input type="radio" name="evo-agg" value="each"> Separate lines per stage</label>
           </div>
         </div>
-        <div style="margin-top:12px">
+        <div class="control-section">
           <div class="control-label">Segments</div>
           <div class="toggle-links"><span id="evo-seg-all">All</span><span id="evo-seg-none">None</span></div>
           <div id="evo-segments"></div>
@@ -417,16 +427,16 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
           <div class="control-label">Report Quarter</div>
           <select id="vint-quarter"></select>
         </div>
-        <div style="margin-top:12px">
+        <div class="control-section">
           <div class="control-label">Pipeline Stages</div>
           <div id="vint-stages"></div>
         </div>
-        <div style="margin-top:12px">
+        <div class="control-section">
           <div class="control-label">Vintage</div>
           <div class="toggle-links"><span id="vint-vint-all">All</span><span id="vint-vint-none">None</span></div>
           <div id="vint-vintages"></div>
         </div>
-        <div style="margin-top:12px">
+        <div class="control-section">
           <div class="control-label">Segments</div>
           <div class="toggle-links"><span id="vint-seg-all">All</span><span id="vint-seg-none">None</span></div>
           <div id="vint-segments"></div>
