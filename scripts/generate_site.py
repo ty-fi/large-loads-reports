@@ -388,8 +388,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
         <div class="control-section">
           <div class="control-label">Show stages</div>
           <div class="radio-group">
-            <label><input type="radio" name="evo-agg" value="sum" checked> Combined (sum all selected)</label>
-            <label><input type="radio" name="evo-agg" value="each"> Separate lines per stage</label>
+            <label><input type="radio" name="evo-agg" value="sum"> Combined (sum all selected)</label>
+            <label><input type="radio" name="evo-agg" value="each" checked> Separate lines per stage</label>
           </div>
         </div>
         <div class="control-section">
