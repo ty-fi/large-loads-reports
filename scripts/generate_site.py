@@ -625,14 +625,16 @@ function renderEvolution() {
       grouped[k] = (grouped[k] || 0) + r.load_mw;
     });
     const dashes = ['solid', 'dash', 'dot'];
-    quartersSorted.forEach((q, qi) => {
-      STAGES.forEach((stage, si) => {
-        if (!stages.includes(stage)) return;
+    STAGES.forEach((stage, si) => {
+      if (!stages.includes(stage)) return;
+      quartersSorted.forEach((q) => {
         const yVals = years.map(y => grouped[q + '|' + stage + '|' + y] || 0);
         if (yVals.every(v => v === 0)) return;
         traces.push({
           x: years, y: yVals, mode: 'lines+markers',
-          name: `${q} · ${stage}`,
+          name: q,
+          legendgroup: stage,
+          legendgrouptitle: { text: stage },
           line: { color: QUARTER_COLORS[q], width: 1.8, dash: dashes[si % dashes.length] },
           marker: { size: 5 },
           hovertemplate: `<b>%{x}</b><br>${q} ${stage}: %{y:,.0f} MW<extra></extra>`,
