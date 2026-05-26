@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Large raw downloads
+outputs/workbooks/raw/
+outputs/workbooks/*/   # extracted Excel files
+
+# OS
+Thumbs.db
+.DS_Store
