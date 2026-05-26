@@ -12,6 +12,7 @@ SCRIPT_DIR = Path(__file__).parent
 COMBINED_DIR = SCRIPT_DIR.parent / "outputs" / "combined"
 OUTPUT_DIR = SCRIPT_DIR.parent / "output"
 OUT = OUTPUT_DIR / "index.html"
+ROOT = SCRIPT_DIR.parent / "index.html"
 
 df_proj = pd.read_csv(COMBINED_DIR / "pipeline_projects.csv")
 df_changes = pd.read_csv(COMBINED_DIR / "pipeline_changes.csv")
@@ -862,6 +863,7 @@ def main():
     html = html.replace("__DATA_PLACEHOLDER__", json.dumps(EMBEDDED, indent=None, ensure_ascii=False, default=str))
 
     OUT.write_text(html, encoding="utf-8")
+    ROOT.write_text(html, encoding="utf-8")
     print(f"Generated {OUT} ({OUT.stat().st_size:,} bytes)")
     print(f"  Rows: long={len(EMBEDDED['long'])}, changes={len(EMBEDDED['changes'])}, table={len(EMBEDDED['table'])}")
     print(f"  Added: {len(EMBEDDED['added'])}, Removed: {len(EMBEDDED['removed'])}")
