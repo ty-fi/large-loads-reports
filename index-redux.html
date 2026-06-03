@@ -359,6 +359,16 @@
       </div>
       <div class="pill-checkboxes" id="snap-segments"></div>
     </div>
+  <div class="filter-group" id="snap-fc-group">
+      <label>Load Forecasts</label>
+      <div class="filter-tools">
+        <div class="toggle-links">
+          <span id="snap-fc-all">All</span>
+          <span id="snap-fc-none">None</span>
+        </div>
+      </div>
+      <div class="pill-checkboxes" id="snap-forecasts"></div>
+    </div>
   </div>
 
   <div class="chart-subtitle" id="snap-subtitle"></div>
@@ -476,6 +486,16 @@
       </div>
       <div class="pill-checkboxes" id="vint-segments"></div>
     </div>
+    <div class="filter-group" id="vint-fc-group">
+      <label>Load Forecasts</label>
+      <div class="filter-tools">
+        <div class="toggle-links">
+          <span id="vint-fc-all">All</span>
+          <span id="vint-fc-none">None</span>
+        </div>
+      </div>
+      <div class="pill-checkboxes" id="vint-forecasts"></div>
+    </div>
   </div>
   <div class="chart-subtitle" id="vint-subtitle"></div>
   <div class="card"><div id="vint-chart"></div></div>
@@ -490,6 +510,8 @@ const CHANGES = DATA.changes;
 const TABLE = DATA.table;
 const ADDED = DATA.added;
 const REMOVED = DATA.removed;
+const FORECASTS = DATA.forecasts || [];
+const FORECAST_IDS = FORECASTS.map(f => f.id);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const QUARTERS = META.quarters;
@@ -500,18 +522,7 @@ const VINTAGE_LABELS = META.vintage_labels;
 const STAGE_COLORS = META.stage_colors;
 const VINTAGE_COLORS = META.vintage_colors;
 const METRIC_LABELS = META.metric_labels;
-
-// Upgraded GP-aligned stage colors
-const STAGE_COLORS_REDUX = {
-  'Contract for Electric Service': '#166534',
-  'Request for Service': '#92400e',
-  'Technical Review': '#475569',
-};
-const STAGE_BG_REDUX = {
-  'Contract for Electric Service': '#dcfce7',
-  'Request for Service': '#fef3c7',
-  'Technical Review': '#f1f5f9',
-};
+const FORECAST_LABELS = META.forecast_labels || {};
 
 function vintBucket(age) { return age === 1 ? 2 : age <= 3 ? 1 : 0; }
 
@@ -524,10 +535,20 @@ function buildCheckboxes(containerId, items, values, onChange) {
   c.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.addEventListener('change', onChange));
 }
 
-function buildSelect(selId, items, onChange) {
+function buildSelect(selId, items, onChange, selected) {
   const sel = document.getElementById(selId);
-  sel.innerHTML = items.map(v => `<option value="${v}">${v}</option>`).join('');
+  sel.innerHTML = items.map(v => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('');
   sel.addEventListener('change', onChange);
+}
+
+function buildForecastCheckboxes(containerId, onChange) {
+  const c = document.getElementById(containerId);
+  c.innerHTML = FORECASTS.map(f =>
+    `<label><input type="checkbox" value="${f.id}"> ${escHtml(f.title)}</label>`
+  ).join('');
+  c.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', onChange);
+  });
 }
 
 function getChecked(containerId) {
@@ -629,6 +650,23 @@ document.getElementById('info-toggle').addEventListener('click', () => {
   document.getElementById('info-panel').classList.toggle('open');
 });
 
+// ── Forecast reference line helper ───────────────────────────────────────────
+function addForecastTraces(traces, prefix) {
+  const selected = getChecked(prefix + '-forecasts');
+  const lines = [];
+  (FORECASTS || []).filter(f => selected.includes(f.id)).forEach(f => {
+    const valid = f.x.map((year, i) => ({x: year, y: f.y[i]})).filter(p => p.y != null && p.y !== 0);
+    if (!valid.length) return;
+    lines.push({
+      x: valid.map(p => p.x), y: valid.map(p => p.y),
+      mode: 'lines', name: f.title, type: 'scatter',
+      line: { color: f.color, width: 3, dash: 'dash' },
+      hovertemplate: `<b>%{x}</b><br>${f.title}: %{y:,.0f} MW<extra></extra>`,
+    });
+  });
+  return traces.concat(lines);
+}
+
 // ── Render: Snapshot ─────────────────────────────────────────────────────────
 function renderSnapshot() {
   const quarter = document.getElementById('snap-quarter').value;
@@ -681,7 +719,8 @@ function renderSnapshot() {
   const peakMw = peakEntries.length ? Number(peakEntries[0][1]).toLocaleString() : '&mdash;';
   document.getElementById('snap-subtitle').innerHTML = `${quarter} snapshot &middot; Peak planning year: <strong>${peakYr}</strong> at <strong>${peakMw} MW</strong> total`;
 
-  Plotly.react('snap-chart', traces, layout);
+  const allTraces = addForecastTraces(traces, 'snap');
+  Plotly.react('snap-chart', allTraces, layout);
 
   const projCols = ['proj_id','project_stage','segment','territory','announced_load_mw','initial_service_date','project_age','match_confidence'];
   const projRows = TABLE.filter(r => r.report_quarter === quarter && stages.includes(r.project_stage) && segments.includes(r.segment));
@@ -876,7 +915,8 @@ function renderVintage() {
     plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
     margin: { l: 60, r: 220, t: 40, b: 60 }, hovermode: 'x unified', height: 480,
   };
-  Plotly.react('vint-chart', traces, layout);
+  const allTraces = addForecastTraces(traces, 'vint');
+  Plotly.react('vint-chart', allTraces, layout);
 }
 
 // ── Enhanced Table Builder ───────────────────────────────────────────────────
@@ -961,13 +1001,16 @@ function buildTable(containerId, rows, cols) {
 
 // ── Init controls ────────────────────────────────────────────────────────────
 // Snapshot
-buildSelect('snap-quarter', QUARTERS, renderSnapshot);
+buildSelect('snap-quarter', QUARTERS, renderSnapshot, '2026Q1');
 buildCheckboxes('snap-stages', STAGES, STAGES, renderSnapshot);
 buildCheckboxes('snap-segments', SEGMENTS, SEGMENTS, renderSnapshot);
 document.getElementById('snap-seg-all').addEventListener('click', () => { setAll('snap-segments', true); renderSnapshot(); });
 document.getElementById('snap-seg-none').addEventListener('click', () => { setAll('snap-segments', false); renderSnapshot(); });
 document.getElementById('snap-stage-all').addEventListener('click', () => { setAll('snap-stages', true); renderSnapshot(); });
 document.getElementById('snap-stage-none').addEventListener('click', () => { setAll('snap-stages', false); renderSnapshot(); });
+buildForecastCheckboxes('snap-forecasts', renderSnapshot);
+document.getElementById('snap-fc-all').addEventListener('click', () => { setAll('snap-forecasts', true); renderSnapshot(); });
+document.getElementById('snap-fc-none').addEventListener('click', () => { setAll('snap-forecasts', false); renderSnapshot(); });
 
 // Evolution
 buildCheckboxes('evo-quarters', QUARTERS, QUARTERS, renderEvolution);
@@ -1004,7 +1047,7 @@ const chgCols = ['report_quarter','added_projects','added_mw','removed_projects'
 buildTable('chg-table-wrap', CHANGES, chgCols);
 
 // Vintage
-buildSelect('vint-quarter', QUARTERS, renderVintage);
+buildSelect('vint-quarter', QUARTERS, renderVintage, '2026Q1');
 buildCheckboxes('vint-stages', STAGES, STAGES, renderVintage);
 buildCheckboxes('vint-vintages', VINTAGE_LABELS, VINTAGE_LABELS, renderVintage);
 buildCheckboxes('vint-segments', SEGMENTS, SEGMENTS, renderVintage);
@@ -1012,6 +1055,9 @@ document.getElementById('vint-vint-all').addEventListener('click', () => { setAl
 document.getElementById('vint-vint-none').addEventListener('click', () => { setAll('vint-vintages', false); renderVintage(); });
 document.getElementById('vint-seg-all').addEventListener('click', () => { setAll('vint-segments', true); renderVintage(); });
 document.getElementById('vint-seg-none').addEventListener('click', () => { setAll('vint-segments', false); renderVintage(); });
+buildForecastCheckboxes('vint-forecasts', renderVintage);
+document.getElementById('vint-fc-all').addEventListener('click', () => { setAll('vint-forecasts', true); renderVintage(); });
+document.getElementById('vint-fc-none').addEventListener('click', () => { setAll('vint-forecasts', false); renderVintage(); });
 
 // ── Initial render ───────────────────────────────────────────────────────────
 renderSnapshot();

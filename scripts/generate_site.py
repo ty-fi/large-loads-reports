@@ -107,6 +107,33 @@ METRIC_LABELS = {
     "avg_delay_months": "Average Schedule Delay (months)",
 }
 
+# Load GPC load forecasts for reference line overlays
+df_fc = pd.read_csv(SCRIPT_DIR.parent / "GPC_Load_Forecasts.csv")
+_fc_desired = {
+    "2023-IRP-update-w-LRM-minus-2023-IRP-base": "#d32f2f",
+    "2025-IRP-base-minus-2023-IRP-base": "#1976d2",
+    "GPC-all-system-peak-demand": "#757575",
+}
+_load_cols = [c for c in df_fc.columns if c.startswith("load_")]
+for col in _load_cols:
+    df_fc[col] = df_fc[col].apply(lambda x: float(str(x).replace(',', '').replace('"', '')) if pd.notna(x) else 0.0)
+
+forecast_data = []
+for _, row in df_fc.iterrows():
+    fid = row["forecast"]
+    if fid not in _fc_desired:
+        continue
+    title = str(row.get("graphing title", "") or fid).replace('"""', '').replace('"', '').strip()
+    years_dict = {int(c.replace("load_", "")): row[c] for c in _load_cols}
+    x_vals = sorted(years_dict.keys())
+    forecast_data.append({
+        "id": fid,
+        "title": title,
+        "color": _fc_desired[fid],
+        "x": x_vals,
+        "y": [years_dict[y] for y in x_vals],
+    })
+
 table_data = df_proj[[
     "proj_id", "report_quarter", "project_stage", "segment", "territory",
     "announced_load_mw", "initial_service_date", "project_age", "match_confidence",
@@ -118,6 +145,7 @@ EMBEDDED = {
     "table": table_data,
     "added": df_added.to_dict("records") if not df_added.empty else [],
     "removed": df_removed.to_dict("records") if not df_removed.empty else [],
+    "forecasts": forecast_data,
     "meta": {
         "quarters": QUARTERS_PRESENT,
         "years": ALL_YEARS,
@@ -127,6 +155,7 @@ EMBEDDED = {
         "stage_colors": STAGE_COLORS,
         "vintage_colors": VINTAGE_COLORS,
         "metric_labels": METRIC_LABELS,
+        "forecast_labels": {f["id"]: f["title"] for f in forecast_data},
     },
 }
 
@@ -345,8 +374,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
           <div class="toggle-links"><span id="snap-seg-all">All</span><span id="snap-seg-none">None</span></div>
           <div id="snap-segments"></div>
         </div>
+        <div class="control-section">
+          <div class="control-label">Load Forecasts</div>
+          <div class="toggle-links"><span id="snap-fc-all">All</span><span id="snap-fc-none">None</span></div>
+          <div id="snap-forecasts"></div>
+        </div>
       </div>
-    </div>
+    </div>  <!-- Snapshot sidebar -->
     <div class="chart-main">
       <div class="chart-subtitle" id="snap-subtitle"></div>
       <div class="card"><div id="snap-chart"></div></div>
@@ -441,8 +475,13 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
           <div class="toggle-links"><span id="vint-seg-all">All</span><span id="vint-seg-none">None</span></div>
           <div id="vint-segments"></div>
         </div>
+        <div class="control-section">
+          <div class="control-label">Load Forecasts</div>
+          <div class="toggle-links"><span id="vint-fc-all">All</span><span id="vint-fc-none">None</span></div>
+          <div id="vint-forecasts"></div>
+        </div>
       </div>
-    </div>
+    </div> <!-- Vintage sidebar -->
     <div class="chart-main">
       <div class="chart-subtitle" id="vint-subtitle"></div>
       <div class="card"><div id="vint-chart"></div></div>
@@ -459,6 +498,8 @@ const CHANGES = DATA.changes;
 const TABLE = DATA.table;
 const ADDED = DATA.added;
 const REMOVED = DATA.removed;
+const FORECASTS = DATA.forecasts || [];
+const FORECAST_IDS = FORECASTS.map(f => f.id);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const QUARTERS = META.quarters;
@@ -469,6 +510,8 @@ const VINTAGE_LABELS = META.vintage_labels;
 const STAGE_COLORS = META.stage_colors;
 const VINTAGE_COLORS = META.vintage_colors;
 const METRIC_LABELS = META.metric_labels;
+const FORECAST_LABELS = META.forecast_labels || {};
+const FORECAST_ITEM_LABELS = FORECAST_IDS.map(id => FORECAST_LABELS[id] || id);
 
 function vintIdx(label) { return VINTAGE_LABELS.indexOf(label); }
 function vintBucket(age) { return age === 1 ? 2 : age <= 3 ? 1 : 0; }
@@ -484,10 +527,20 @@ function buildCheckboxes(containerId, items, values, onChange) {
   });
 }
 
-function buildSelect(selId, items, onChange) {
+function buildSelect(selId, items, onChange, selected) {
   const sel = document.getElementById(selId);
-  sel.innerHTML = items.map(v => `<option value="${v}">${v}</option>`).join('');
+  sel.innerHTML = items.map(v => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('');
   sel.addEventListener('change', onChange);
+}
+
+function buildForecastCheckboxes(containerId, onChange) {
+  const c = document.getElementById(containerId);
+  c.innerHTML = FORECASTS.map(f =>
+    `<label><input type="checkbox" value="${f.id}"> ${escHtml(f.title)}</label>`
+  ).join('');
+  c.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', onChange);
+  });
 }
 
 function getChecked(containerId) {
@@ -523,6 +576,24 @@ function switchTab(tab) {
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
 });
+
+// ── Forecast reference line helper ───────────────────────────────────────────
+function addForecastTraces(traces, prefix) {
+  const selected = getChecked(prefix + '-forecasts');
+  const lines = [];
+  (FORECASTS || []).filter(f => selected.includes(f.id)).forEach(f => {
+    // Map forecast series to the chart's x-axis range (planning years)
+    const valid = f.x.map((year, i) => ({x: year, y: f.y[i]})).filter(p => p.y != null && p.y !== 0);
+    if (!valid.length) return;
+    lines.push({
+      x: valid.map(p => p.x), y: valid.map(p => p.y),
+      mode: 'lines', name: f.title, type: 'scatter',
+      line: { color: f.color, width: 3, dash: 'dash' },
+      hovertemplate: `<b>%{x}</b><br>${f.title}: %{y:,.0f} MW<extra></extra>`,
+    });
+  });
+  return traces.concat(lines);
+}
 
 // ── Render: Snapshot ─────────────────────────────────────────────────────────
 function renderSnapshot() {
@@ -567,6 +638,8 @@ function renderSnapshot() {
     height: 520,
   };
 
+  const allTraces = addForecastTraces(traces, 'snap');
+
   const totalMw = {};
   filtered.forEach(r => { totalMw[r.planning_year] = (totalMw[r.planning_year] || 0) + r.load_mw; });
   const peakEntries = Object.entries(totalMw).sort((a,b) => b[1] - a[1]);
@@ -574,7 +647,7 @@ function renderSnapshot() {
   const peakMw = peakEntries.length ? Number(peakEntries[0][1]).toLocaleString() : '&mdash;';
   document.getElementById('snap-subtitle').textContent = `${quarter} snapshot · Peak planning year: ${peakYr} at ${peakMw} MW total`;
 
-  Plotly.react('snap-chart', traces, layout);
+  Plotly.react('snap-chart', allTraces, layout);
 
   // Project table
   const projCols = ['proj_id','project_stage','segment','territory','announced_load_mw','initial_service_date','project_age','match_confidence'];
@@ -806,7 +879,9 @@ function renderVintage() {
     height: 520,
   };
 
-  Plotly.react('vint-chart', traces, layout);
+  const allTraces = addForecastTraces(traces, 'vint');
+
+  Plotly.react('vint-chart', allTraces, layout);
 }
 
 // ── Table builder ────────────────────────────────────────────────────────────
@@ -892,11 +967,14 @@ function buildTable(containerId, rows, cols) {
 
 // ── Init controls ────────────────────────────────────────────────────────────
 // Snapshot controls
-buildSelect('snap-quarter', QUARTERS, renderSnapshot);
+buildSelect('snap-quarter', QUARTERS, renderSnapshot, '2026Q1');
 buildCheckboxes('snap-stages', STAGES, STAGES, renderSnapshot);
 buildCheckboxes('snap-segments', SEGMENTS, SEGMENTS, renderSnapshot);
 document.getElementById('snap-seg-all').addEventListener('click', () => { setAll('snap-segments', true); renderSnapshot(); });
 document.getElementById('snap-seg-none').addEventListener('click', () => { setAll('snap-segments', false); renderSnapshot(); });
+buildForecastCheckboxes('snap-forecasts', renderSnapshot);
+document.getElementById('snap-fc-all').addEventListener('click', () => { setAll('snap-forecasts', true); renderSnapshot(); });
+document.getElementById('snap-fc-none').addEventListener('click', () => { setAll('snap-forecasts', false); renderSnapshot(); });
 
 // Evolution controls
 buildCheckboxes('evo-quarters', QUARTERS, QUARTERS, renderEvolution);
@@ -942,7 +1020,7 @@ const chgCols = ['report_quarter','added_projects','added_mw','removed_projects'
 buildTable('chg-table-wrap', CHANGES, chgCols);
 
 // Vintage controls
-buildSelect('vint-quarter', QUARTERS, renderVintage);
+buildSelect('vint-quarter', QUARTERS, renderVintage, '2026Q1');
 buildCheckboxes('vint-stages', STAGES, STAGES, renderVintage);
 buildCheckboxes('vint-vintages', VINTAGE_LABELS, VINTAGE_LABELS, renderVintage);
 buildCheckboxes('vint-segments', SEGMENTS, SEGMENTS, renderVintage);
@@ -950,6 +1028,9 @@ document.getElementById('vint-vint-all').addEventListener('click', () => { setAl
 document.getElementById('vint-vint-none').addEventListener('click', () => { setAll('vint-vintages', false); renderVintage(); });
 document.getElementById('vint-seg-all').addEventListener('click', () => { setAll('vint-segments', true); renderVintage(); });
 document.getElementById('vint-seg-none').addEventListener('click', () => { setAll('vint-segments', false); renderVintage(); });
+buildForecastCheckboxes('vint-forecasts', renderVintage);
+document.getElementById('vint-fc-all').addEventListener('click', () => { setAll('vint-forecasts', true); renderVintage(); });
+document.getElementById('vint-fc-none').addEventListener('click', () => { setAll('vint-forecasts', false); renderVintage(); });
 
 // ── Initial render ───────────────────────────────────────────────────────────
 renderSnapshot();
@@ -973,7 +1054,7 @@ def main():
 
     print(f"  Rows: long={len(EMBEDDED['long'])}, changes={len(EMBEDDED['changes'])}, table={len(EMBEDDED['table'])}")
     print(f"  Added: {len(EMBEDDED['added'])}, Removed: {len(EMBEDDED['removed'])}")
-    print(f"  Quarters: {len(EMBEDDED['meta']['quarters'])}, Years: {len(EMBEDDED['meta']['years'])}")
+    print(f"  Forecasts: {len(EMBEDDED['forecasts'])}, Quarters: {len(EMBEDDED['meta']['quarters'])}, Years: {len(EMBEDDED['meta']['years'])}")
 
 
 if __name__ == "__main__":
