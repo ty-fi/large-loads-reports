@@ -10,3 +10,6 @@ outputs/workbooks/*/   # extracted Excel files
 # OS
 Thumbs.db
 .DS_Store
+
+# Claude session files
+_*.md

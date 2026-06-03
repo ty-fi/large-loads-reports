@@ -1,8 +1,8 @@
 """
-Generates a self-contained static HTML page with Plotly.js charts
+Generates self-contained static HTML pages with Plotly.js charts
 for the Georgia Power Large Load Economic Development Pipeline.
 Embeds all data as JSON — no server needed.
-Output: large-loads-reports/output/index.html
+Outputs: index.html (original), index-redux.html (redesigned)
 """
 import json
 from pathlib import Path
@@ -10,9 +10,9 @@ import pandas as pd
 
 SCRIPT_DIR = Path(__file__).parent
 COMBINED_DIR = SCRIPT_DIR.parent / "outputs" / "combined"
-OUTPUT_DIR = SCRIPT_DIR.parent / "output"
-OUT = OUTPUT_DIR / "index.html"
 ROOT = SCRIPT_DIR.parent / "index.html"
+REDUX = SCRIPT_DIR.parent / "index-redux.html"
+REDUX_TEMPLATE = REDUX.read_text(encoding="utf-8") if REDUX.exists() else None
 
 df_proj = pd.read_csv(COMBINED_DIR / "pipeline_projects.csv")
 df_changes = pd.read_csv(COMBINED_DIR / "pipeline_changes.csv")
@@ -960,14 +960,17 @@ renderSnapshot();
 
 
 def main():
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
     html = HTML_TEMPLATE
     html = html.replace("__DATA_PLACEHOLDER__", json.dumps(EMBEDDED, indent=None, ensure_ascii=False, default=str))
 
-    OUT.write_text(html, encoding="utf-8")
     ROOT.write_text(html, encoding="utf-8")
-    print(f"Generated {OUT} ({OUT.stat().st_size:,} bytes)")
+    print(f"Generated {ROOT} ({ROOT.stat().st_size:,} bytes)")
+
+    if REDUX_TEMPLATE:
+        redux_html = REDUX_TEMPLATE.replace("__DATA_PLACEHOLDER__", json.dumps(EMBEDDED, indent=None, ensure_ascii=False, default=str))
+        REDUX.write_text(redux_html, encoding="utf-8")
+        print(f"Generated {REDUX} ({REDUX.stat().st_size:,} bytes)")
+
     print(f"  Rows: long={len(EMBEDDED['long'])}, changes={len(EMBEDDED['changes'])}, table={len(EMBEDDED['table'])}")
     print(f"  Added: {len(EMBEDDED['added'])}, Removed: {len(EMBEDDED['removed'])}")
     print(f"  Quarters: {len(EMBEDDED['meta']['quarters'])}, Years: {len(EMBEDDED['meta']['years'])}")
