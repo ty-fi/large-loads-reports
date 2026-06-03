@@ -27,8 +27,8 @@ All three use the same underlying data. The Dash app computes data live from `ou
 ## Data Pipeline
 
 ```
-outputs/workbooks/          # Raw Excel files per quarter (scraped)
-outputs/2026Q1/             # Q1 2026 manual CSVs
+inputs/workbooks/           # Raw Excel files per quarter (scraped)
+inputs/2026Q1/              # Q1 2026 manual CSVs
          │
          ▼
 scripts/build_dataset.py    # Normalize → combined CSV files
@@ -67,11 +67,16 @@ large-loads-reports/
 ├── index.html              # Static dashboard (generated)
 ├── index-redux.html        # Redesigned static dashboard (generated)
 ├── GPC_Load_Forecasts.csv  # Reference forecast series
-├── scripts/                # All Python scripts
-├── outputs/
-│   ├── combined/           # Normalized CSVs
-│   ├── 2026Q1/            # Q1 2026 manual CSVs
+├── assets/
+│   ├── index.template.html       # Source template for index.html
+│   ├── index-redux.template.html # Source template for index-redux.html
+│   └── rmi_logo_horitzontal_no_tagline.svg
+├── inputs/
+│   ├── 2026Q1/             # Q1 2026 manual CSVs
 │   └── workbooks/          # Quarterly Excel files
+├── outputs/
+│   └── combined/           # Normalized CSVs (generated)
+├── scripts/                # All Python scripts
 └── README.md
 ```
 

@@ -11,9 +11,10 @@ import openpyxl
 import pandas as pd
 
 SCRIPT_DIR = Path(__file__).parent
+INPUTS_DIR = SCRIPT_DIR.parent / "inputs"
 OUTPUTS_DIR = SCRIPT_DIR.parent / "outputs"
-WORKBOOKS_DIR = OUTPUTS_DIR / "workbooks"
-CSV_2026Q1_DIR = OUTPUTS_DIR / "2026Q1"
+WORKBOOKS_DIR = INPUTS_DIR / "workbooks"
+CSV_2026Q1_DIR = INPUTS_DIR / "2026Q1"
 COMBINED_DIR = OUTPUTS_DIR / "combined"
 
 STAGE_ALIASES = {

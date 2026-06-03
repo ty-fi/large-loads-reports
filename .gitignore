@@ -4,8 +4,8 @@ __pycache__/
 .venv/
 
 # Large raw downloads
-outputs/workbooks/raw/
-outputs/workbooks/*/   # extracted Excel files
+inputs/workbooks/raw/
+inputs/workbooks/*/   # extracted Excel files
 
 # OS
 Thumbs.db

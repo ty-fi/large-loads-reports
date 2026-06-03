@@ -11,10 +11,10 @@ import pandas as pd
 SCRIPT_DIR = Path(__file__).parent
 COMBINED_DIR = SCRIPT_DIR.parent / "outputs" / "combined"
 ROOT = SCRIPT_DIR.parent / "index.html"
-ROOT_TEMPLATE_FILE = SCRIPT_DIR.parent / "index.template.html"
+ROOT_TEMPLATE_FILE = SCRIPT_DIR.parent / "assets" / "index.template.html"
 ROOT_TEMPLATE = ROOT_TEMPLATE_FILE.read_text(encoding="utf-8") if ROOT_TEMPLATE_FILE.exists() else None
 REDUX = SCRIPT_DIR.parent / "index-redux.html"
-REDUX_TEMPLATE_FILE = SCRIPT_DIR.parent / "index-redux.template.html"
+REDUX_TEMPLATE_FILE = SCRIPT_DIR.parent / "assets" / "index-redux.template.html"
 REDUX_TEMPLATE = REDUX_TEMPLATE_FILE.read_text(encoding="utf-8") if REDUX_TEMPLATE_FILE.exists() else None
 
 df_proj = pd.read_csv(COMBINED_DIR / "pipeline_projects.csv")
