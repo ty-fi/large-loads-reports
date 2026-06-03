@@ -8,6 +8,9 @@
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
+    --rmi-teal: #56c4c4;
+    --rmi-navy: #123c63;
+    --rmi-navy-deep: #1c355e;
     --bg: #f8fafc;
     --surface: #ffffff;
     --border: #e2e8f0;
@@ -15,55 +18,160 @@
     --muted: #475569;
     --accent: #2563eb;
     --accent-light: #eff6ff;
+    --green: #166534;
+    --green-bg: #dcfce7;
+    --amber: #92400e;
+    --amber-bg: #fef3c7;
+    --slate: #475569;
+    --slate-bg: #f1f5f9;
+    --radius: 10px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+    --transition: 0.2s ease;
   }
   html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
 
-  /* Header */
+  /* ── Header ── */
   header {
     background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    padding: 24px 30px 20px;
-  }
-  header h1 { font-size: 24px; font-weight: 700; color: var(--text); margin: 0; letter-spacing: -0.5px; }
-  header p { margin: 6px 0 0; color: var(--muted); font-size: 13.5px; }
-
-  /* Tabs */
-  .tab-bar {
+    padding: 22px 32px 18px;
     display: flex;
-    gap: 16px;
-    background: var(--surface);
-    padding: 0 30px;
-    border-bottom: 1px solid var(--border);
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 3px solid var(--rmi-teal);
+  }
+  header .brand { display: flex; align-items: center; gap: 16px; }
+  header .brand img { height: 36px; width: auto; }
+  header .brand h1 { font-size: 22px; font-weight: 700; color: var(--text); margin: 0; letter-spacing: -0.3px; line-height: 1.2; }
+  header .brand p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+  header .header-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+  .info-btn {
+    background: #f1f5f9; border: 1px solid var(--border);
+    color: var(--muted); padding: 6px 14px; border-radius: 6px;
+    font-size: 12px; cursor: pointer; transition: var(--transition); font-weight: 500;
+  }
+  .info-btn:hover { background: #e2e8f0; color: var(--text); }
+
+  /* Info panel */
+  #info-panel {
+    display: none; background: #fff; border-radius: var(--radius);
+    box-shadow: var(--shadow-md); margin: 16px 32px 0; padding: 20px 24px;
+    border-left: 4px solid var(--rmi-teal); font-size: 13px; line-height: 1.6; color: #374151;
+  }
+  #info-panel.open { display: block; }
+  #info-panel strong { color: var(--text); }
+  #info-panel a { color: var(--accent); text-decoration: none; }
+  #info-panel a:hover { text-decoration: underline; }
+
+  /* ── Tabs ── */
+  .tab-bar {
+    display: flex; gap: 4px; background: transparent; padding: 16px 32px 0;
   }
   .tab-btn {
-    padding: 14px 4px;
-    font-size: 13.5px;
-    font-weight: 500;
-    color: var(--muted);
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    cursor: pointer;
-    transition: all 0.15s ease-in-out;
+    padding: 10px 20px; font-size: 13px; font-weight: 500; color: var(--muted);
+    background: transparent; border: none; border-radius: 8px 8px 0 0;
+    cursor: pointer; transition: var(--transition); position: relative;
   }
-  .tab-btn:hover { color: var(--accent); }
-  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab-btn:hover { color: var(--rmi-navy); background: rgba(18,60,99,0.04); }
+  .tab-btn.active { color: var(--rmi-navy); font-weight: 600; background: var(--surface); box-shadow: 0 -1px 3px rgba(0,0,0,0.04); }
+  .tab-btn.active::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+    height: 2px; background: var(--rmi-teal); border-radius: 1px 1px 0 0;
+  }
 
-  /* Content */
-  .tab-content { display: none; padding: 24px 30px; }
+  /* ── Tab Content ── */
+  .tab-content { display: none; padding: 16px 32px 32px; }
   .tab-content.active { display: block; }
 
-  /* Cards */
+  /* ── Cards ── */
   .card {
-    background: var(--surface);
-    border-radius: 12px;
-    padding: 24px;
-    border: 1px solid var(--border);
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
-    margin-bottom: 24px;
+    background: var(--surface); border-radius: var(--radius);
+    padding: 20px 24px; border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm); margin-bottom: 20px;
   }
 
-  /* Controls */
+  /* ── Horizontal Filter Bar ── */
+  .filter-bar {
+    display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-end;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 20px; box-shadow: var(--shadow-sm); margin-bottom: 20px;
+  }
+  .filter-group { display: flex; flex-direction: column; gap: 6px; min-width: 100px; }
+  .filter-group.compact { min-width: 80px; }
+  .filter-group label, .filter-group .filter-label {
+    font-size: 10px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.6px;
+  }
+  .filter-group select, .filter-group input[type="text"] {
+    padding: 7px 12px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px; background: #f8fafc; color: var(--text);
+    outline: none; transition: var(--transition); cursor: pointer;
+  }
+  .filter-group select:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light);
+  }
+
+  .pill-checkboxes {
+    display: flex; flex-wrap: wrap; gap: 5px; max-height: 120px; overflow-y: auto;
+  }
+  .pill-checkboxes label {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 12px; cursor: pointer; user-select: none;
+    background: #f1f5f9; padding: 4px 10px; border-radius: 20px;
+    border: 1px solid transparent; transition: var(--transition); color: var(--muted); white-space: nowrap;
+  }
+  .pill-checkboxes label:hover { background: #e2e8f0; color: var(--text); }
+  .pill-checkboxes label:has(input:checked) {
+    background: var(--accent-light); border-color: var(--accent); color: var(--accent); font-weight: 500;
+  }
+  .pill-checkboxes input { accent-color: var(--accent); margin: 0; }
+  .toggle-links { display: flex; gap: 6px; }
+  .toggle-links span {
+    cursor: pointer; font-size: 11px; font-weight: 500; color: var(--accent);
+    padding: 2px 8px; border-radius: 4px; background: var(--accent-light);
+    transition: var(--transition);
+  }
+  .toggle-links span:hover { background: #dbeafe; }
+
+  .filter-group .filter-tools { display: flex; align-items: center; gap: 8px; }
+
+  /* ── Collapsible sidebar (Evolution tab) ── */
+  .layout-with-sidebar { display: flex; gap: 20px; }
+  .sidebar-toggle {
+    display: none; position: fixed; bottom: 24px; right: 24px; z-index: 100;
+    background: var(--rmi-navy); color: #fff; border: none; border-radius: 50%;
+    width: 48px; height: 48px; font-size: 18px; cursor: pointer;
+    box-shadow: var(--shadow-md); transition: var(--transition);
+  }
+  .sidebar-toggle:hover { transform: scale(1.05); }
+  .sidebar-panel {
+    width: 280px; flex-shrink: 0; overflow-y: auto; max-height: calc(100vh - 300px);
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 18px 20px; box-shadow: var(--shadow-sm); position: sticky; top: 16px;
+  }
+  .sidebar-panel .sidebar-section { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+  .sidebar-panel .sidebar-section:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+  .sidebar-panel .sidebar-label {
+    font-size: 10px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 8px;
+  }
+  .sidebar-panel .pill-checkboxes { max-height: 180px; }
+  .sidebar-panel select { width: 100%; padding: 7px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: #f8fafc; color: var(--text); outline: none; }
+  .chart-main { flex: 1; min-width: 0; }
+
+  @media (max-width: 768px) {
+    .layout-with-sidebar { flex-direction: column; }
+    .sidebar-panel { width: 100%; position: static; max-height: none; }
+    .sidebar-toggle { display: flex; align-items: center; justify-content: center; }
+  }
+
+  /* ── Chart subtitle ── */
+  .chart-subtitle {
+    font-size: 13.5px; font-weight: 500; color: var(--muted);
+    margin-bottom: 14px; background: #f1f5f9; padding: 8px 16px; border-radius: 6px; display: inline-block;
+  }
+
+  /* ── Controls ── */
   .controls-row { display: flex; gap: 24px; flex-wrap: wrap; }
   .control-group { min-width: 180px; }
   .control-label {
@@ -76,40 +184,6 @@
     border-top: 1px solid var(--border);
   }
   .control-section:first-child { margin-top: 0; padding-top: 0; border-top: none; }
-  
-  .control-section label, .control-group label {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    font-size: 13px;
-    margin-bottom: 2px;
-    cursor: pointer;
-    line-height: 1.5;
-    color: #334155;
-    padding: 7px 10px;
-    border-radius: 6px;
-    transition: background-color 0.15s, color 0.15s;
-  }
-  .control-section label:hover, .control-group label:hover {
-    background-color: #f1f5f9;
-    color: var(--text);
-  }
-  .control-group input[type="checkbox"], .control-group input[type="radio"] {
-    margin-top: 3px;
-    accent-color: var(--accent);
-  }
-
-  .control-group select, .control-group input[type="text"] {
-    width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13.5px;
-    background: var(--surface); color: var(--text); outline: none; transition: border-color 0.15s, box-shadow 0.15s;
-  }
-  .control-group select:focus, .control-group input[type="text"]:focus {
-    border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light);
-  }
-
-  .toggle-links { font-size: 11px; margin-bottom: 8px; display: flex; gap: 8px; }
-  .toggle-links span { cursor: pointer; color: var(--accent); font-weight: 500; padding: 2px 6px; border-radius: 4px; background: var(--accent-light); transition: background-color 0.15s; }
-  .toggle-links span:hover { background-color: #dbeafe; }
 
   /* Radio pill group */
   .radio-group {
@@ -145,48 +219,98 @@
     accent-color: var(--accent);
   }
 
-  /* Chart area */
-  .chart-area { display: flex; gap: 24px; }
-  .chart-sidebar { width: 300px; flex-shrink: 0; }
-  .chart-main { flex: 1; min-width: 0; }
-  .chart-subtitle { font-size: 14.5px; font-weight: 500; color: var(--muted); margin-bottom: 16px; background: #f1f5f9; padding: 10px 16px; border-radius: 8px; display: inline-block; }
-
-  /* Table */
+  /* ── Enhanced table ── */
   .table-wrap {
-    overflow-x: auto;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--surface);
-    box-shadow: inset 0 0 2px rgba(0,0,0,0.02);
+    overflow-x: auto; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface); box-shadow: inset 0 0 2px rgba(0,0,0,0.02);
   }
   table.data-table {
     width: 100%; border-collapse: collapse; font-size: 12.5px;
   }
   table.data-table th {
     background: #f8fafc; font-weight: 600; padding: 10px 14px;
-    text-align: left; border-bottom: 2px solid var(--border); cursor: pointer; white-space: nowrap;
-    color: var(--muted); transition: background-color 0.15s; user-select: none;
+    text-align: left; border-bottom: 2px solid var(--border);
+    cursor: pointer; white-space: nowrap; color: var(--muted);
+    transition: background-color 0.15s; user-select: none; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.4px;
   }
   table.data-table th:hover { background: #f1f5f9; color: var(--text); }
-  table.data-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: #334155; }
+  table.data-table td { padding: 9px 14px; border-bottom: 1px solid var(--border); color: #334155; }
   table.data-table tr:last-child td { border-bottom: none; }
   table.data-table tr:hover { background: #f8fafc; }
-  table.data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+  table.data-table .num { text-align: right; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
 
-  /* Responsive */
+  /* Badge cells */
+  .badge {
+    display: inline-block; padding: 2px 10px; border-radius: 20px;
+    font-size: 11px; font-weight: 500; white-space: nowrap;
+  }
+  .badge-contract { background: var(--green-bg); color: var(--green); }
+  .badge-request { background: var(--amber-bg); color: var(--amber); }
+  .badge-review { background: var(--slate-bg); color: var(--slate); }
+  .badge-segment { background: #ede9fe; color: #5b21b6; }
+  .badge-territory-inside { background: #dbeafe; color: #1e40af; }
+  .badge-territory-outside { background: #f3e8ff; color: #6b21a8; }
+  .badge-confidence { background: #f0fdf4; color: #166534; font-size: 10px; }
+
+  /* ── Tooltip helpers ── */
+  .help-tip {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 16px; height: 16px; border-radius: 50%; background: #e2e8f0;
+    color: var(--muted); font-size: 10px; font-weight: 700; cursor: help;
+    margin-left: 4px; position: relative; transition: var(--transition);
+    vertical-align: middle;
+  }
+  .help-tip:hover { background: var(--accent-light); color: var(--accent); }
+  .help-tip .tip-text {
+    display: none; position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+    background: #1e293b; color: #fff; padding: 6px 12px; border-radius: 6px;
+    font-size: 11px; font-weight: 400; white-space: nowrap; z-index: 10;
+    box-shadow: var(--shadow-md); line-height: 1.4;
+  }
+  .help-tip .tip-text::after {
+    content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+    border: 5px solid transparent; border-top-color: #1e293b;
+  }
+  .help-tip:hover .tip-text { display: block; }
+
+  /* ── Responsive ── */
   @media (max-width: 992px) {
-    .chart-area { flex-direction: column; }
-    .chart-sidebar { width: 100%; }
-    .tab-content { padding: 16px; }
+    .filter-bar { flex-direction: column; gap: 12px; }
+    .tab-content { padding: 12px 16px 24px; }
+    header { flex-direction: column; gap: 12px; padding: 16px; }
+    header .brand { flex-wrap: wrap; }
+  }
+  @media (max-width: 600px) {
+    .tab-bar { flex-wrap: wrap; gap: 2px; }
+    .tab-btn { flex: 1; text-align: center; padding: 8px 10px; font-size: 12px; }
   }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Georgia Power Large Load Economic Development Pipeline</h1>
-  <p>Docket 55378 &middot; Quarterly Reports Q1 2024 &ndash; Q1 2026</p>
+  <div class="brand">
+    <img src="assets/rmi_logo_horitzontal_no_tagline.svg" alt="RMI">
+    <div>
+      <h1>Large Load Economic Development Pipeline</h1>
+      <p>Docket 55378 &middot; Quarterly Reports Q1 2024 &ndash; Q1 2026</p>
+    </div>
+  </div>
+  <div class="header-actions">
+    <button class="info-btn" id="info-toggle">&#9432; About this data</button>
+  </div>
 </header>
+
+<div id="info-panel">
+  <strong>Data Source:</strong> Georgia Power Company Large Load Economic Development Reports,
+  filed quarterly with the Georgia Public Service Commission under Docket No. 55378.
+  Data spans Q1 2024 through Q1 2026. Pipeline stages represent projects at
+  <strong>Technical Review</strong>, <strong>Request for Service</strong>, and
+  <strong>Contract for Electric Service</strong>. MW figures reflect each project&#39;s
+  announced load as reported each quarter.
+  <span style="float:right; font-size:11px; color:var(--muted);">&#9432; Project IDs are persistent across quarters</span>
+</div>
 
 <div class="tab-bar">
   <button class="tab-btn active" data-tab="snapshot">Pipeline Snapshot</button>
@@ -197,79 +321,106 @@
 
 <!-- Tab 1: Snapshot -->
 <div class="tab-content active" id="tab-snapshot">
-  <div class="chart-area">
-    <div class="chart-sidebar">
-      <div class="card">
-        <div class="control-group">
-          <div class="control-label">Report Quarter</div>
-          <select id="snap-quarter"></select>
-        </div>
-        <div class="control-section">
-          <div class="control-label">Pipeline Stages</div>
-          <div id="snap-stages"></div>
-        </div>
-        <div class="control-section">
-          <div class="control-label">Segments</div>
-          <div class="toggle-links"><span id="snap-seg-all">All</span><span id="snap-seg-none">None</span></div>
-          <div id="snap-segments"></div>
-        </div>
-        <div class="control-section">
-          <div class="control-label">Load Forecasts</div>
-          <div class="toggle-links"><span id="snap-fc-all">All</span><span id="snap-fc-none">None</span></div>
-          <div id="snap-forecasts"></div>
-        </div>
-      </div>
-    </div>  <!-- Snapshot sidebar -->
-    <div class="chart-main">
-      <div class="chart-subtitle" id="snap-subtitle"></div>
-      <div class="card"><div id="snap-chart"></div></div>
-      <div class="card">
-        <div class="control-label" style="margin-bottom:8px">Projects in selected quarter</div>
-        <div class="table-wrap" id="snap-table-wrap"></div>
-      </div>
+  <div class="filter-bar" id="filter-snapshot">
+    <div class="filter-group compact">
+      <label>Report Quarter</label>
+      <select id="snap-quarter"></select>
     </div>
+    <div class="filter-group">
+      <label>Pipeline Stages</label>
+      <div class="filter-tools">
+        <div class="toggle-links">
+          <span id="snap-stage-all">All</span>
+          <span id="snap-stage-none">None</span>
+        </div>
+      </div>
+      <div class="pill-checkboxes" id="snap-stages"></div>
+    </div>
+    <div class="filter-group">
+      <label>Segments</label>
+      <div class="filter-tools">
+        <div class="toggle-links">
+          <span id="snap-seg-all">All</span>
+          <span id="snap-seg-none">None</span>
+        </div>
+      </div>
+      <div class="pill-checkboxes" id="snap-segments"></div>
+    </div>
+    <div class="filter-group" id="snap-fc-group">
+      <label>Load Forecasts</label>
+      <div class="filter-tools">
+        <div class="toggle-links">
+          <span id="snap-fc-all">All</span>
+          <span id="snap-fc-none">None</span>
+        </div>
+      </div>
+      <div class="pill-checkboxes" id="snap-forecasts"></div>
+    </div>
+  </div>
+
+  <div class="chart-subtitle" id="snap-subtitle"></div>
+  <div class="card"><div id="snap-chart"></div></div>
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div style="font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px;">
+        Projects in selected quarter
+        <span class="help-tip">&#9432;
+          <span class="tip-text">Confidence reflects how projects were matched across quarters: exact fingerprint (segment + territory + load + date), load ramp similarity, or identity match. See assign_project_ids.py for details.</span>
+        </span>
+      </div>
+      <input type="text" id="snap-table-search" placeholder="Search projects..." style="padding:6px 12px; border:1px solid var(--border); border-radius:6px; font-size:12px; outline:none; width:200px;">
+    </div>
+    <div class="table-wrap" id="snap-table-wrap"></div>
   </div>
 </div>
 
 <!-- Tab 2: Evolution -->
 <div class="tab-content" id="tab-evolution">
-  <div class="chart-area">
-    <div class="chart-sidebar">
-      <div class="card">
-        <div class="control-group">
-          <div class="control-label">Report Quarters</div>
-          <div class="toggle-links"><span id="evo-all">All</span><span id="evo-none">None</span></div>
-          <div id="evo-quarters"></div>
+  <div class="layout-with-sidebar">
+    <div class="sidebar-panel" id="evo-sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Report Quarters</div>
+        <div class="toggle-links" style="margin-bottom:6px;">
+          <span id="evo-all">All</span>
+          <span id="evo-none">None</span>
         </div>
-        <div class="control-section">
-          <div class="control-label">Pipeline Stages</div>
-          <div id="evo-stages"></div>
-        </div>
-        <div class="control-section" class="control-group">
-          <div class="control-label">Planning Years</div>
-          <div style="display:flex; gap:8px;">
-            <div style="flex:1;">
-              <div style="font-size:11px; color:var(--muted); margin-bottom:2px;">From</div>
-              <select id="evo-year-lo"></select>
-            </div>
-            <div style="flex:1;">
-              <div style="font-size:11px; color:var(--muted); margin-bottom:2px;">To</div>
-              <select id="evo-year-hi"></select>
-            </div>
+        <div class="pill-checkboxes" id="evo-quarters"></div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Pipeline Stages</div>
+        <div class="pill-checkboxes" id="evo-stages"></div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Planning Years</div>
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1;">
+            <div style="font-size:10px; color:var(--muted); margin-bottom:2px;">From</div>
+            <select id="evo-year-lo"></select>
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:10px; color:var(--muted); margin-bottom:2px;">To</div>
+            <select id="evo-year-hi"></select>
           </div>
         </div>
-        <div class="control-section">
-          <div class="control-label">Show stages</div>
-          <div class="radio-group">
-            <label><input type="radio" name="evo-agg" value="sum"> Combined (sum all selected)</label>
-            <label><input type="radio" name="evo-agg" value="each" checked> Separate lines per stage</label>
-          </div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Show stages</div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <label style="font-size:12px; display:flex; align-items:center; gap:4px; cursor:pointer;">
+            <input type="radio" name="evo-agg" value="sum"> Combined
+          </label>
+          <label style="font-size:12px; display:flex; align-items:center; gap:4px; cursor:pointer;">
+            <input type="radio" name="evo-agg" value="each" checked> Separate
+          </label>
         </div>
-        <div class="control-section">
-          <div class="control-label">Segments</div>
-          <div class="toggle-links"><span id="evo-seg-all">All</span><span id="evo-seg-none">None</span></div>
-          <div id="evo-segments"></div>
+      </div>
+      <div class="sidebar-section" style="border-bottom:none; margin-bottom:0; padding-bottom:0;">
+        <div class="sidebar-label">Segments</div>
+        <div class="toggle-links" style="margin-bottom:6px;">
+          <span id="evo-seg-all">All</span>
+          <span id="evo-seg-none">None</span>
         </div>
+        <div class="pill-checkboxes" id="evo-segments"></div>
       </div>
     </div>
     <div class="chart-main">
@@ -280,52 +431,72 @@
 
 <!-- Tab 3: Changes -->
 <div class="tab-content" id="tab-changes">
-  <div class="card">
-    <div class="control-label">Aggregate Metric</div>
-    <div class="radio-group" id="chg-metrics"></div>
+  <div class="card" style="display:flex; align-items:center; gap:24px; flex-wrap:wrap;">
+    <div style="font-size:10px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px;">Aggregate Metric</div>
+    <div class="pill-checkboxes" id="chg-metrics" style="max-height:none;"></div>
   </div>
   <div class="card"><div id="chg-chart"></div></div>
   <div class="card">
-    <div class="control-label" style="margin-bottom:8px">Full quarterly change summary</div>
+    <div style="font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:10px;">
+      Full quarterly change summary
+      <span class="help-tip">&#9432;
+        <span class="tip-text">Positive values are green, negative values are red.</span>
+      </span>
+    </div>
     <div class="table-wrap" id="chg-table-wrap"></div>
   </div>
 </div>
 
 <!-- Tab 4: Vintage -->
 <div class="tab-content" id="tab-vintage">
-  <div class="chart-area">
-    <div class="chart-sidebar">
-      <div class="card">
-        <div class="control-group">
-          <div class="control-label">Report Quarter</div>
-          <select id="vint-quarter"></select>
-        </div>
-        <div class="control-section">
-          <div class="control-label">Pipeline Stages</div>
-          <div id="vint-stages"></div>
-        </div>
-        <div class="control-section">
-          <div class="control-label">Vintage</div>
-          <div class="toggle-links"><span id="vint-vint-all">All</span><span id="vint-vint-none">None</span></div>
-          <div id="vint-vintages"></div>
-        </div>
-        <div class="control-section">
-          <div class="control-label">Segments</div>
-          <div class="toggle-links"><span id="vint-seg-all">All</span><span id="vint-seg-none">None</span></div>
-          <div id="vint-segments"></div>
-        </div>
-        <div class="control-section">
-          <div class="control-label">Load Forecasts</div>
-          <div class="toggle-links"><span id="vint-fc-all">All</span><span id="vint-fc-none">None</span></div>
-          <div id="vint-forecasts"></div>
+  <div class="filter-bar" id="filter-vintage">
+    <div class="filter-group compact">
+      <label>Report Quarter</label>
+      <select id="vint-quarter"></select>
+    </div>
+    <div class="filter-group">
+      <label>Pipeline Stages</label>
+      <div class="filter-tools">
+        <div class="toggle-links">
+          <span id="vint-stage-all">All</span>
+          <span id="vint-stage-none">None</span>
         </div>
       </div>
-    </div> <!-- Vintage sidebar -->
-    <div class="chart-main">
-      <div class="chart-subtitle" id="vint-subtitle"></div>
-      <div class="card"><div id="vint-chart"></div></div>
+      <div class="pill-checkboxes" id="vint-stages"></div>
+    </div>
+    <div class="filter-group">
+      <label>Vintage</label>
+      <div class="filter-tools">
+        <div class="toggle-links">
+          <span id="vint-vint-all">All</span>
+          <span id="vint-vint-none">None</span>
+        </div>
+      </div>
+      <div class="pill-checkboxes" id="vint-vintages"></div>
+    </div>
+    <div class="filter-group">
+      <label>Segments</label>
+      <div class="filter-tools">
+        <div class="toggle-links">
+          <span id="vint-seg-all">All</span>
+          <span id="vint-seg-none">None</span>
+        </div>
+      </div>
+      <div class="pill-checkboxes" id="vint-segments"></div>
+    </div>
+    <div class="filter-group" id="vint-fc-group">
+      <label>Load Forecasts</label>
+      <div class="filter-tools">
+        <div class="toggle-links">
+          <span id="vint-fc-all">All</span>
+          <span id="vint-fc-none">None</span>
+        </div>
+      </div>
+      <div class="pill-checkboxes" id="vint-forecasts"></div>
     </div>
   </div>
+  <div class="chart-subtitle" id="vint-subtitle"></div>
+  <div class="card"><div id="vint-chart"></div></div>
 </div>
 
 <script>
@@ -350,20 +521,16 @@ const STAGE_COLORS = META.stage_colors;
 const VINTAGE_COLORS = META.vintage_colors;
 const METRIC_LABELS = META.metric_labels;
 const FORECAST_LABELS = META.forecast_labels || {};
-const FORECAST_ITEM_LABELS = FORECAST_IDS.map(id => FORECAST_LABELS[id] || id);
 
-function vintIdx(label) { return VINTAGE_LABELS.indexOf(label); }
 function vintBucket(age) { return age === 1 ? 2 : age <= 3 ? 1 : 0; }
 
-// ── Checkbox builder ─────────────────────────────────────────────────────────
+// ── Checkbox / Select builders ───────────────────────────────────────────────
 function buildCheckboxes(containerId, items, values, onChange) {
   const c = document.getElementById(containerId);
   c.innerHTML = items.map(v =>
     `<label><input type="checkbox" value="${v}" ${values.includes(v) ? 'checked' : ''}> ${v}</label>`
   ).join('');
-  c.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-    cb.addEventListener('change', onChange);
-  });
+  c.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.addEventListener('change', onChange));
 }
 
 function buildSelect(selId, items, onChange, selected) {
@@ -400,6 +567,29 @@ function fmt(n) {
   return Number(n).toLocaleString();
 }
 
+// ── Badge rendering ──────────────────────────────────────────────────────────
+function stageBadge(stage) {
+  const cls = stage === 'Contract for Electric Service' ? 'badge-contract'
+    : stage === 'Request for Service' ? 'badge-request' : 'badge-review';
+  return `<span class="badge ${cls}">${escHtml(stage)}</span>`;
+}
+
+function segmentBadge(seg) {
+  if (!seg || seg === 'unclassified') return '<span style="color:#9ca3af;font-style:italic;">unclassified</span>';
+  return `<span class="badge badge-segment">${escHtml(seg)}</span>`;
+}
+
+function territoryBadge(terr) {
+  if (!terr) return '&mdash;';
+  const cls = terr.toLowerCase() === 'inside' ? 'badge-territory-inside' : 'badge-territory-outside';
+  return `<span class="badge ${cls}">${escHtml(terr)}</span>`;
+}
+
+function confidenceBadge(val) {
+  if (!val) return '&mdash;';
+  return `<span class="badge badge-confidence">${escHtml(val)}</span>`;
+}
+
 // ── Tab switching ────────────────────────────────────────────────────────────
 function switchTab(tab) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -411,9 +601,13 @@ function switchTab(tab) {
   if (tab === 'changes') renderChanges();
   if (tab === 'vintage') renderVintage();
 }
-
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+
+// Info panel toggle
+document.getElementById('info-toggle').addEventListener('click', () => {
+  document.getElementById('info-panel').classList.toggle('open');
 });
 
 // ── Forecast reference line helper ───────────────────────────────────────────
@@ -421,7 +615,6 @@ function addForecastTraces(traces, prefix) {
   const selected = getChecked(prefix + '-forecasts');
   const lines = [];
   (FORECASTS || []).filter(f => selected.includes(f.id)).forEach(f => {
-    // Map forecast series to the chart's x-axis range (planning years)
     const valid = f.x.map((year, i) => ({x: year, y: f.y[i]})).filter(p => p.y != null && p.y !== 0);
     if (!valid.length) return;
     lines.push({
@@ -439,6 +632,7 @@ function renderSnapshot() {
   const quarter = document.getElementById('snap-quarter').value;
   const stages = getChecked('snap-stages');
   const segments = getChecked('snap-segments');
+
   if (!stages.length || !segments.length) {
     document.getElementById('snap-subtitle').textContent = '';
     Plotly.react('snap-chart', [], {});
@@ -447,7 +641,6 @@ function renderSnapshot() {
   }
 
   const filtered = D.filter(r => r.report_quarter === quarter && stages.includes(r.project_stage) && segments.includes(r.segment));
-
   const grouped = {};
   filtered.forEach(r => {
     const key = r.planning_year;
@@ -455,7 +648,6 @@ function renderSnapshot() {
     if (!grouped[key][r.project_stage]) grouped[key][r.project_stage] = 0;
     grouped[key][r.project_stage] += r.load_mw;
   });
-
   const years = [...new Set(filtered.map(r => r.planning_year))].sort((a,b) => a-b);
 
   const traces = STAGES.filter(s => stages.includes(s)).reverse().map(stage => ({
@@ -474,29 +666,48 @@ function renderSnapshot() {
     legend: { orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1 },
     plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
     margin: { l: 60, r: 20, t: 40, b: 60 }, hovermode: 'x unified',
-    height: 520,
+    height: 480,
   };
-
-  const allTraces = addForecastTraces(traces, 'snap');
 
   const totalMw = {};
   filtered.forEach(r => { totalMw[r.planning_year] = (totalMw[r.planning_year] || 0) + r.load_mw; });
   const peakEntries = Object.entries(totalMw).sort((a,b) => b[1] - a[1]);
   const peakYr = peakEntries.length ? peakEntries[0][0] : '&mdash;';
   const peakMw = peakEntries.length ? Number(peakEntries[0][1]).toLocaleString() : '&mdash;';
-  document.getElementById('snap-subtitle').textContent = `${quarter} snapshot · Peak planning year: ${peakYr} at ${peakMw} MW total`;
+  document.getElementById('snap-subtitle').innerHTML = `${quarter} snapshot &middot; Peak planning year: <strong>${peakYr}</strong> at <strong>${peakMw} MW</strong> total`;
 
+  const allTraces = addForecastTraces(traces, 'snap');
   Plotly.react('snap-chart', allTraces, layout);
 
   // Project table
   const projCols = ['proj_id','project_stage','segment','territory','announced_load_mw','initial_service_date','project_age','match_confidence'];
   const projRows = TABLE.filter(r => r.report_quarter === quarter && stages.includes(r.project_stage) && segments.includes(r.segment));
   buildTable('snap-table-wrap', projRows, projCols);
+
+  // Wire search
+  const searchEl = document.getElementById('snap-table-search');
+  searchEl.oninput = function() {
+    const q = this.value.toLowerCase().trim();
+    if (!q) {
+      buildTable('snap-table-wrap', projRows, projCols);
+      return;
+    }
+    const filteredRows = projRows.filter(r =>
+      Object.values(r).some(v => v != null && String(v).toLowerCase().includes(q))
+    );
+    buildTable('snap-table-wrap', filteredRows, projCols);
+  };
 }
 
 // ── Render: Evolution ────────────────────────────────────────────────────────
 const QUARTER_COLORS = {};
-const PALETTE = ['#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'];
+const TEAL = [0x56, 0xc4, 0xc4]; // #56c4c4
+const NAVY = [0x12, 0x3c, 0x63]; // #123c63
+function lerpColor(a, b, t) {
+  return '#' + [0,1,2].map(i => Math.round(a[i] + (b[i] - a[i]) * t).toString(16).padStart(2,'0')).join('');
+}
+const n = Math.max(QUARTERS.length - 1, 1);
+const PALETTE = QUARTERS.map((_, i) => lerpColor(TEAL, NAVY, i / n));
 QUARTERS.forEach((q,i) => { QUARTER_COLORS[q] = PALETTE[i % PALETTE.length]; });
 
 function renderEvolution() {
@@ -513,76 +724,56 @@ function renderEvolution() {
   }
 
   const filtered = D.filter(r =>
-    quarters.includes(r.report_quarter) &&
-    stages.includes(r.project_stage) &&
-    segments.includes(r.segment) &&
-    r.planning_year >= yrLo && r.planning_year <= yrHi
+    quarters.includes(r.report_quarter) && stages.includes(r.project_stage) &&
+    segments.includes(r.segment) && r.planning_year >= yrLo && r.planning_year <= yrHi
   );
-
   const quartersSorted = QUARTERS.filter(q => quarters.includes(q));
   const years = [];
   for (let y = yrLo; y <= yrHi; y++) years.push(y);
-
   const traces = [];
 
   if (agg === 'sum') {
     const grouped = {};
-    filtered.forEach(r => {
-      const k = r.report_quarter + '|' + r.planning_year;
-      grouped[k] = (grouped[k] || 0) + r.load_mw;
-    });
+    filtered.forEach(r => { const k = r.report_quarter + '|' + r.planning_year; grouped[k] = (grouped[k] || 0) + r.load_mw; });
     quartersSorted.forEach(q => {
       const yVals = years.map(y => grouped[q + '|' + y] || 0);
-      traces.push({
-        x: years, y: yVals, mode: 'lines+markers', name: q,
-        line: { color: QUARTER_COLORS[q], width: 2.5 },
-        marker: { size: 7 },
-        hovertemplate: `<b>%{x}</b><br>${q}: %{y:,.0f} MW<extra></extra>`,
-      });
+      traces.push({ x: years, y: yVals, mode: 'lines+markers', name: q,
+        line: { color: QUARTER_COLORS[q], width: 2.5 }, marker: { size: 7 },
+        hovertemplate: `<b>%{x}</b><br>${q}: %{y:,.0f} MW<extra></extra>` });
     });
   } else {
     const grouped = {};
-    filtered.forEach(r => {
-      const k = r.report_quarter + '|' + r.project_stage + '|' + r.planning_year;
-      grouped[k] = (grouped[k] || 0) + r.load_mw;
-    });
+    filtered.forEach(r => { const k = r.report_quarter + '|' + r.project_stage + '|' + r.planning_year; grouped[k] = (grouped[k] || 0) + r.load_mw; });
     const dashes = ['dot', 'dash', 'solid'];
     STAGES.forEach((stage, si) => {
       if (!stages.includes(stage)) return;
-      quartersSorted.forEach((q) => {
+      quartersSorted.forEach(q => {
         const yVals = years.map(y => grouped[q + '|' + stage + '|' + y] || 0);
         if (yVals.every(v => v === 0)) return;
-        traces.push({
-          x: years, y: yVals, mode: 'lines+markers',
-          name: q,
-          legendgroup: stage,
-          legendgrouptitle: { text: stage },
+        traces.push({ x: years, y: yVals, mode: 'lines+markers', name: q,
+          legendgroup: stage, legendgrouptitle: { text: stage },
           line: { color: QUARTER_COLORS[q], width: 1.8, dash: dashes[si % dashes.length] },
           marker: { size: 5 },
-          hovertemplate: `<b>%{x}</b><br>${q} ${stage}: %{y:,.0f} MW<extra></extra>`,
-        });
+          hovertemplate: `<b>%{x}</b><br>${q} ${stage}: %{y:,.0f} MW<extra></extra>` });
       });
     });
   }
 
   const stageLabel = stages.length === 3 ? 'all stages' : stages.join(' + ');
   const ylabel = agg === 'sum' ? `Total Pipeline MW (${stageLabel})` : 'Pipeline MW by Stage';
-
   const layout = {
     xaxis: { title: 'Planning Year', tickmode: 'linear', dtick: 1 },
     yaxis: { title: ylabel, tickformat: ',' },
     legend: { orientation: 'v', x: 1.01, y: 1, font: { size: 11 } },
     plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
-    margin: { l: 60, r: 200, t: 20, b: 60 }, hovermode: 'x unified',
-    height: 540,
+    margin: { l: 60, r: 200, t: 20, b: 60 }, hovermode: 'x unified', height: 480,
   };
-
   Plotly.react('evo-chart', traces, layout);
 }
 
 // ── Render: Changes ──────────────────────────────────────────────────────────
 function renderChanges() {
-  const metric = document.querySelector('input[name="chg-metric"]:checked').value;
+  const metric = document.querySelector('#chg-metrics input[type="radio"]:checked').value;
   const flowMetrics = ['added_projects','added_mw','removed_projects','removed_mw'];
   const qs = QUARTERS.filter(q => q !== '2024Q1');
 
@@ -591,65 +782,42 @@ function renderChanges() {
     const view = metric.endsWith('_mw') ? 'mw' : 'count';
     const unit = view === 'mw' ? 'MW' : 'projects';
     const ylabel = view === 'mw' ? 'Announced MW' : 'Project Count';
-    const flowTitle = metric.startsWith('added') ? 'Projects Added' : 'Projects Removed';
-
     const traces = [];
     STAGES.slice().reverse().forEach(stage => {
       const colors = VINTAGE_COLORS[stage];
       VINTAGE_LABELS.forEach((vlabel, vidx) => {
-        const mask = df.filter(r =>
-          qs.includes(r.report_quarter) &&
-          r.project_stage === stage &&
-          r.vintage_label === vlabel
-        );
+        const mask = df.filter(r => qs.includes(r.report_quarter) && r.project_stage === stage && r.vintage_label === vlabel);
         if (!mask.length) return;
-
         const vals = qs.map(q => {
           const items = mask.filter(r => r.report_quarter === q);
           if (view === 'mw') return items.reduce((s, r) => s + (r.announced_load_mw || 0), 0);
           return items.length;
         });
         if (vals.every(v => v === 0)) return;
-
-        traces.push({
-          x: qs, y: vals, type: 'bar',
+        traces.push({ x: qs, y: vals, type: 'bar',
           name: `${stage.slice(0,3)}\u2026 \u00b7 ${vlabel}`,
-          marker: { color: colors[vidx] },
-          legendgroup: stage,
-          legendgrouptitle: { text: stage },
-          hovertemplate: `<b>%{x}</b><br>${stage}<br>${vlabel}: %{y:,.0f} ${unit}<extra></extra>`,
-        });
+          marker: { color: colors[vidx] }, legendgroup: stage, legendgrouptitle: { text: stage },
+          hovertemplate: `<b>%{x}</b><br>${stage}<br>${vlabel}: %{y:,.0f} ${unit}<extra></extra>` });
       });
     });
-
     const layout = {
-      barmode: 'stack',
-      xaxis: { title: 'Report Quarter' },
-      yaxis: { title: ylabel, tickformat: ',' },
+      barmode: 'stack', xaxis: { title: 'Report Quarter' }, yaxis: { title: ylabel, tickformat: ',' },
       legend: { groupclick: 'toggleitem', orientation: 'v', x: 1.01, y: 1, font: { size: 11 } },
       plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
-      margin: { l: 60, r: 200, t: 20, b: 50 },
-      height: 420,
+      margin: { l: 60, r: 200, t: 20, b: 50 }, height: 400,
     };
     Plotly.react('chg-chart', traces, layout);
   } else {
     const sub = CHANGES.filter(r => r[metric] != null).sort((a,b) => QUARTERS.indexOf(a.report_quarter) - QUARTERS.indexOf(b.report_quarter));
     const colors = sub.map(r => r[metric] < 0 ? '#c62828' : r[metric] > 0 ? '#2e7d32' : '#999');
-    const trace = {
-      x: sub.map(r => r.report_quarter), y: sub.map(r => r[metric]),
+    const trace = { x: sub.map(r => r.report_quarter), y: sub.map(r => r[metric]),
       type: 'bar', marker: { color: colors },
-      hovertemplate: `<b>%{x}</b><br>${METRIC_LABELS[metric]}: %{y:,.1f}<extra></extra>`,
-    };
+      hovertemplate: `<b>%{x}</b><br>${METRIC_LABELS[metric]}: %{y:,.1f}<extra></extra>` };
     const layout = {
-      xaxis: { title: 'Report Quarter' },
-      yaxis: { title: METRIC_LABELS[metric], tickformat: ',' },
-      shapes: [{
-        type: 'line', x0: -0.5, x1: sub.length - 0.5, y0: 0, y1: 0,
-        line: { color: '#888', width: 1 },
-      }],
+      xaxis: { title: 'Report Quarter' }, yaxis: { title: METRIC_LABELS[metric], tickformat: ',' },
+      shapes: [{ type: 'line', x0: -0.5, x1: sub.length - 0.5, y0: 0, y1: 0, line: { color: '#888', width: 1 } }],
       plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
-      margin: { l: 60, r: 20, t: 20, b: 50 },
-      height: 420,
+      margin: { l: 60, r: 20, t: 20, b: 50 }, height: 400,
     };
     Plotly.react('chg-chart', [trace], layout);
   }
@@ -661,6 +829,7 @@ function renderVintage() {
   const stages = getChecked('vint-stages');
   const vintages = getChecked('vint-vintages');
   const segments = getChecked('vint-segments');
+
   if (!stages.length || !segments.length || !vintages.length) {
     document.getElementById('vint-subtitle').textContent = '';
     Plotly.react('vint-chart', [], {});
@@ -668,9 +837,7 @@ function renderVintage() {
   }
 
   const filtered = D.filter(r =>
-    r.report_quarter === quarter &&
-    stages.includes(r.project_stage) &&
-    segments.includes(r.segment)
+    r.report_quarter === quarter && stages.includes(r.project_stage) && segments.includes(r.segment)
   ).map(r => {
     const vi = vintBucket(r.project_age);
     return { ...r, vintage_idx: vi, vintage_label: VINTAGE_LABELS[vi] };
@@ -689,15 +856,10 @@ function renderVintage() {
       sub.forEach(r => { grouped[r.planning_year] = (grouped[r.planning_year] || 0) + r.load_mw; });
       const yVals = years.map(y => grouped[y] || 0);
       if (yVals.every(v => v === 0)) return;
-
-      traces.push({
-        x: years, y: yVals, type: 'bar',
+      traces.push({ x: years, y: yVals, type: 'bar',
         name: `${stage.slice(0,3)}\u2026 \u00b7 ${vlabel}`,
-        marker: { color: colors[vidx] },
-        legendgroup: stage,
-        legendgrouptitle: { text: stage },
-        hovertemplate: `<b>%{x}</b><br>${stage}<br>${vlabel}: %{y:,.0f} MW<extra></extra>`,
-      });
+        marker: { color: colors[vidx] }, legendgroup: stage, legendgrouptitle: { text: stage },
+        hovertemplate: `<b>%{x}</b><br>${stage}<br>${vlabel}: %{y:,.0f} MW<extra></extra>` });
     });
   });
 
@@ -706,24 +868,20 @@ function renderVintage() {
   const peakEntries = Object.entries(totalMw).sort((a,b) => b[1] - a[1]);
   const peakYr = peakEntries.length ? peakEntries[0][0] : '&mdash;';
   const peakMw = peakEntries.length ? Number(peakEntries[0][1]).toLocaleString() : '&mdash;';
-  document.getElementById('vint-subtitle').textContent = `${quarter} snapshot by vintage · Peak: ${peakYr} at ${peakMw} MW`;
+  document.getElementById('vint-subtitle').innerHTML = `${quarter} snapshot by vintage &middot; Peak: <strong>${peakYr}</strong> at <strong>${peakMw} MW</strong>`;
 
   const layout = {
-    barmode: 'stack',
-    xaxis: { title: 'Planning Year', tickmode: 'linear', dtick: 1 },
+    barmode: 'stack', xaxis: { title: 'Planning Year', tickmode: 'linear', dtick: 1 },
     yaxis: { title: 'Total Pipeline MW', tickformat: ',' },
     legend: { groupclick: 'toggleitem', orientation: 'v', x: 1.01, y: 1, font: { size: 11 } },
     plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
-    margin: { l: 60, r: 220, t: 40, b: 60 }, hovermode: 'x unified',
-    height: 520,
+    margin: { l: 60, r: 220, t: 40, b: 60 }, hovermode: 'x unified', height: 480,
   };
-
   const allTraces = addForecastTraces(traces, 'vint');
-
   Plotly.react('vint-chart', allTraces, layout);
 }
 
-// ── Table builder ────────────────────────────────────────────────────────────
+// ── Enhanced Table Builder ───────────────────────────────────────────────────
 function buildTable(containerId, rows, cols) {
   const displayNames = {
     proj_id: 'ID', project_stage: 'Stage', segment: 'Segment', territory: 'Territory',
@@ -736,23 +894,36 @@ function buildTable(containerId, rows, cols) {
   };
 
   const numCols = new Set(['announced_load_mw','project_age','added_projects','added_mw','removed_projects','removed_mw','net_mw','load_change_net_mw','stage_changes_count','avg_delay_months']);
+  const stageCol = 'project_stage';
+  const segCol = 'segment';
+  const terrCol = 'territory';
+  const confCol = 'match_confidence';
 
   let html = '<table class="data-table"><thead><tr>';
   cols.forEach(c => {
     html += `<th data-col="${c}">${displayNames[c] || c} <span class="sort-arrow" style="opacity:0.3; font-size:10px; margin-left:4px;">↕</span></th>`;
   });
   html += '</tr></thead><tbody>';
+
   rows.forEach(r => {
     html += '<tr>';
     cols.forEach(c => {
       const val = r[c];
       const cls = numCols.has(c) ? 'num' : '';
-      if (c === 'announced_load_mw' || c === 'added_mw' || c === 'removed_mw' || c === 'net_mw' || c === 'load_change_net_mw') {
+      if (c === stageCol) {
+        html += `<td>${stageBadge(val)}</td>`;
+      } else if (c === segCol) {
+        html += `<td>${segmentBadge(val)}</td>`;
+      } else if (c === terrCol) {
+        html += `<td>${territoryBadge(val)}</td>`;
+      } else if (c === confCol) {
+        html += `<td>${confidenceBadge(val)}</td>`;
+      } else if (c === 'announced_load_mw' || c === 'added_mw' || c === 'removed_mw' || c === 'net_mw' || c === 'load_change_net_mw') {
         html += `<td class="${cls}">${fmt(val)}</td>`;
       } else if (c === 'avg_delay_months') {
         html += `<td class="${cls}">${val != null ? Number(val).toFixed(1) : '&mdash;'}</td>`;
-      } else if (c === 'match_confidence') {
-        html += `<td>${escHtml(val || '')}</td>`;
+      } else if (c === 'project_age') {
+        html += `<td class="${cls}">${val != null ? val : '&mdash;'}</td>`;
       } else {
         html += `<td>${escHtml(val)}</td>`;
       }
@@ -762,36 +933,22 @@ function buildTable(containerId, rows, cols) {
   html += '</tbody></table>';
   document.getElementById(containerId).innerHTML = html;
 
-  // Column sorting
+  // Sortable columns
   document.querySelectorAll(`#${containerId} th`).forEach(th => {
     th.addEventListener('click', () => {
       const col = th.dataset.col;
       const tbody = th.closest('table').querySelector('tbody');
       const rowsArr = Array.from(tbody.querySelectorAll('tr'));
       const asc = th.dataset.asc !== 'true';
-
-      // Reset all headers
       th.closest('tr').querySelectorAll('th').forEach(sibling => {
-        if (sibling !== th) {
-          sibling.dataset.asc = '';
-          const arrow = sibling.querySelector('.sort-arrow');
-          if (arrow) { arrow.textContent = '↕'; arrow.style.opacity = '0.3'; }
-        }
+        if (sibling !== th) { sibling.dataset.asc = ''; const arrow = sibling.querySelector('.sort-arrow'); if (arrow) { arrow.textContent = '↕'; arrow.style.opacity = '0.3'; } }
       });
-
       th.dataset.asc = asc;
       const arrow = th.querySelector('.sort-arrow');
-      if (arrow) {
-        arrow.textContent = asc ? '▲' : '▼';
-        arrow.style.opacity = '1';
-        arrow.style.color = 'var(--accent)';
-      }
-
+      if (arrow) { arrow.textContent = asc ? '▲' : '▼'; arrow.style.opacity = '1'; arrow.style.color = 'var(--accent)'; }
       rowsArr.sort((a, b) => {
         let va = a.children[th.cellIndex].textContent.replace(/[↕▲▼]/g, '').trim();
         let vb = b.children[th.cellIndex].textContent.replace(/[↕▲▼]/g, '').trim();
-        
-        // Strip commas and non-numeric chars for numbers
         if (numCols.has(col)) {
           const na = parseFloat(va.replace(/,/g, ''));
           const nb = parseFloat(vb.replace(/,/g, ''));
@@ -805,17 +962,19 @@ function buildTable(containerId, rows, cols) {
 }
 
 // ── Init controls ────────────────────────────────────────────────────────────
-// Snapshot controls
+// Snapshot
 buildSelect('snap-quarter', QUARTERS, renderSnapshot, '2026Q1');
 buildCheckboxes('snap-stages', STAGES, STAGES, renderSnapshot);
 buildCheckboxes('snap-segments', SEGMENTS, SEGMENTS, renderSnapshot);
 document.getElementById('snap-seg-all').addEventListener('click', () => { setAll('snap-segments', true); renderSnapshot(); });
 document.getElementById('snap-seg-none').addEventListener('click', () => { setAll('snap-segments', false); renderSnapshot(); });
+document.getElementById('snap-stage-all').addEventListener('click', () => { setAll('snap-stages', true); renderSnapshot(); });
+document.getElementById('snap-stage-none').addEventListener('click', () => { setAll('snap-stages', false); renderSnapshot(); });
 buildForecastCheckboxes('snap-forecasts', renderSnapshot);
 document.getElementById('snap-fc-all').addEventListener('click', () => { setAll('snap-forecasts', true); renderSnapshot(); });
 document.getElementById('snap-fc-none').addEventListener('click', () => { setAll('snap-forecasts', false); renderSnapshot(); });
 
-// Evolution controls
+// Evolution
 buildCheckboxes('evo-quarters', QUARTERS, QUARTERS, renderEvolution);
 buildCheckboxes('evo-stages', STAGES, STAGES, renderEvolution);
 buildCheckboxes('evo-segments', SEGMENTS, SEGMENTS, renderEvolution);
@@ -823,19 +982,12 @@ buildCheckboxes('evo-segments', SEGMENTS, SEGMENTS, renderEvolution);
 const yrMin = YEARS[0], yrMax = YEARS[YEARS.length - 1];
 const yrLo = document.getElementById('evo-year-lo');
 const yrHi = document.getElementById('evo-year-hi');
-
-// Populate select options
 yrLo.innerHTML = YEARS.map(y => `<option value="${y}" ${y === Math.max(2026, yrMin) ? 'selected' : ''}>${y}</option>`).join('');
 yrHi.innerHTML = YEARS.map(y => `<option value="${y}" ${y === Math.min(2032, yrMax) ? 'selected' : ''}>${y}</option>`).join('');
 
 function updateYears() {
   let lo = parseInt(yrLo.value), hi = parseInt(yrHi.value);
-  if (lo > hi) {
-    // swap them so min <= max
-    const tmp = yrLo.value;
-    yrLo.value = yrHi.value;
-    yrHi.value = tmp;
-  }
+  if (lo > hi) { const tmp = yrLo.value; yrLo.value = yrHi.value; yrHi.value = tmp; }
   renderEvolution();
 }
 yrLo.addEventListener('change', updateYears);
@@ -847,20 +999,21 @@ document.getElementById('evo-none').addEventListener('click', () => { setAll('ev
 document.getElementById('evo-seg-all').addEventListener('click', () => { setAll('evo-segments', true); renderEvolution(); });
 document.getElementById('evo-seg-none').addEventListener('click', () => { setAll('evo-segments', false); renderEvolution(); });
 
-// Changes controls
+// Changes
 const chgMetrics = document.getElementById('chg-metrics');
 chgMetrics.innerHTML = Object.entries(METRIC_LABELS).map(([k,v]) =>
   `<label><input type="radio" name="chg-metric" value="${k}" ${k === 'net_mw' ? 'checked' : ''}> ${v}</label>`
 ).join('');
 chgMetrics.querySelectorAll('input[type="radio"]').forEach(el => el.addEventListener('change', renderChanges));
 
-// Build changes table
 const chgCols = ['report_quarter','added_projects','added_mw','removed_projects','removed_mw','net_mw','load_change_net_mw','stage_changes_count','avg_delay_months'];
 buildTable('chg-table-wrap', CHANGES, chgCols);
 
-// Vintage controls
+// Vintage
 buildSelect('vint-quarter', QUARTERS, renderVintage, '2026Q1');
 buildCheckboxes('vint-stages', STAGES, STAGES, renderVintage);
+document.getElementById('vint-stage-all').addEventListener('click', () => { setAll('vint-stages', true); renderVintage(); });
+document.getElementById('vint-stage-none').addEventListener('click', () => { setAll('vint-stages', false); renderVintage(); });
 buildCheckboxes('vint-vintages', VINTAGE_LABELS, VINTAGE_LABELS, renderVintage);
 buildCheckboxes('vint-segments', SEGMENTS, SEGMENTS, renderVintage);
 document.getElementById('vint-vint-all').addEventListener('click', () => { setAll('vint-vintages', true); renderVintage(); });
