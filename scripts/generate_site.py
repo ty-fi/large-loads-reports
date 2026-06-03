@@ -12,7 +12,8 @@ SCRIPT_DIR = Path(__file__).parent
 COMBINED_DIR = SCRIPT_DIR.parent / "outputs" / "combined"
 ROOT = SCRIPT_DIR.parent / "index.html"
 REDUX = SCRIPT_DIR.parent / "index-redux.html"
-REDUX_TEMPLATE = REDUX.read_text(encoding="utf-8") if REDUX.exists() else None
+REDUX_TEMPLATE_FILE = SCRIPT_DIR.parent / "index-redux.template.html"
+REDUX_TEMPLATE = REDUX_TEMPLATE_FILE.read_text(encoding="utf-8") if REDUX_TEMPLATE_FILE.exists() else None
 
 df_proj = pd.read_csv(COMBINED_DIR / "pipeline_projects.csv")
 df_changes = pd.read_csv(COMBINED_DIR / "pipeline_changes.csv")
