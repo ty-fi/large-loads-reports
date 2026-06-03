@@ -698,7 +698,7 @@ function renderSnapshot() {
     y: years.map(y => grouped[y] && grouped[y][stage] ? grouped[y][stage] : 0),
     name: stage,
     type: 'bar',
-    marker: { color: STAGE_COLORS_REDUX[stage] || STAGE_COLORS[stage] },
+    marker: { color: STAGE_COLORS[stage] },
     hovertemplate: `<b>%{x}</b><br>${stage}: %{y:,.0f} MW<extra></extra>`,
   }));
 
