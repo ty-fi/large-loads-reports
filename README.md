@@ -1,37 +1,32 @@
 # Georgia Power Large Load Economic Development Pipeline Dashboard
 
-Interactive web dashboard for Georgia Power's large load pipeline data, sourced from quarterly reports filed under Docket 55378 (Q1 2024 - Q1 2026).
+Interactive web dashboard for Georgia Power's large load pipeline data, sourced from quarterly reports filed under Docket 55378 (Q1 2024 – Q1 2026). Built by RMI.
 
 ## Key Features
 
 **Four tab views:**
 - **Pipeline Snapshot** — Stacked bar chart of pipeline MW by planning year for a selected quarter
-- **Pipeline Evolution** — Multi-quarter comparison, combining or separating by pipeline stage
+- **Pipeline Evolution** — Multi-quarter comparison with teal-to-navy color gradient, combining or separating by pipeline stage
 - **Quarter-over-Quarter Changes** — Aggregate metrics (net MW, added/removed projects, schedule delays)
 - **Snapshot by Vintage** — Projects broken down by age bucket (New, 2-3 qtrs, 4+ qtrs)
 
-**Filters:** Report quarter, pipeline stage, segment (data center, manufacturing, etc.), vintage, planning year range.
+**Filters:** Horizontal pill-based filter bars for report quarter, pipeline stage, segment (data center, manufacturing, etc.), vintage, and planning year range. All/None toggles on every filter group.
 
-**Load forecast overlays:** Selectable dashed reference lines from `GPC_Load_Forecasts.csv` — IRP large load projections and historical system peak demand — plotted alongside the stacked bars in Snapshot and Vintage views.
+**Load forecast overlays:** Selectable dashed reference lines from IRP filings — large load projections and historical system peak demand — plotted alongside the stacked bars in Snapshot and Vintage views.
 
-## Two Rendering Approaches
-
-| Mode | File | How to run |
-|------|-------|------------|
-| **Static HTML** | `index.html` | Open in browser — fully self-contained, no server |
-| **Redesigned static** | `index-redux.html` | Open in browser — same data, enhanced UI with KPI cards, branded header, styled badges |
-| **Dash app** | `scripts/app.py` | `python scripts/app.py` → `http://localhost:8050` |
-
-All three use the same underlying data. The Dash app computes data live from `outputs/combined/` CSVs. The static HTML files embed all data as inline JSON.
+**Table features:** Color-coded badges for pipeline stage, segment, and territory. Sortable columns. Client-side search filtering on the projects table.
 
 ## Data Pipeline
 
 ```
-inputs/workbooks/           # Raw Excel files per quarter (scraped)
-inputs/2026Q1/              # Q1 2026 manual CSVs
+inputs/
+  ├── workbooks/             # Raw Excel files per quarter (scraped)
+  ├── 2026Q1/                # Q1 2026 manual CSVs
+  └── GPC_Load_Forecasts.csv # Reference forecast series
          │
          ▼
-scripts/build_dataset.py    # Normalize → combined CSV files
+scripts/build_dataset.py     # Normalize → combined CSV files
+scripts/assign_project_ids.py # Persistent project IDs across quarters
          │
          ▼
 outputs/combined/
@@ -40,13 +35,10 @@ outputs/combined/
   └── pipeline_snapshot.csv  # Aggregated by (quarter, stage, year)
          │
          ▼
-scripts/assign_project_ids.py  # Persistent project IDs across quarters
+scripts/generate_site.py     # Embed JSON into template → index.html
          │
          ▼
-scripts/generate_site.py    # Inline JSON embedding → index.html + index-redux.html
-         │
-         ▼
-index.html / index-redux.html  # Deployable — GitHub Pages ready
+index.html                   # Deployable — GitHub Pages ready
 ```
 
 ## Key Scripts
@@ -56,7 +48,7 @@ index.html / index-redux.html  # Deployable — GitHub Pages ready
 | `scripts/scrape_workbooks.py` | Downloads quarterly Excel report files |
 | `scripts/build_dataset.py` | Parses Excel/CSV → normalized combined datasets |
 | `scripts/assign_project_ids.py` | Assigns persistent IDs to track projects across quarters |
-| `scripts/generate_site.py` | Generates static `index.html` and `index-redux.html` with embedded JSON |
+| `scripts/generate_site.py` | Generates `index.html` with embedded JSON from template |
 | `scripts/app.py` | Plotly Dash app (live server, same 4-tab layout) |
 | `scripts/spot_check.py` / `spot_check2.py` | Validation scripts |
 
@@ -64,30 +56,28 @@ index.html / index-redux.html  # Deployable — GitHub Pages ready
 
 ```
 large-loads-reports/
-├── index.html              # Static dashboard (generated)
-├── index-redux.html        # Redesigned static dashboard (generated)
-├── GPC_Load_Forecasts.csv  # Reference forecast series
+├── index.html                # Static dashboard (generated)
 ├── assets/
-│   ├── index.template.html       # Source template for index.html
-│   ├── index-redux.template.html # Source template for index-redux.html
+│   ├── index.template.html   # Source template for index.html
 │   └── rmi_logo_horitzontal_no_tagline.svg
 ├── inputs/
-│   ├── 2026Q1/             # Q1 2026 manual CSVs
-│   └── workbooks/          # Quarterly Excel files
+│   ├── 2026Q1/               # Q1 2026 manual CSVs
+│   ├── workbooks/            # Quarterly Excel files
+│   └── GPC_Load_Forecasts.csv # Reference forecast series
 ├── outputs/
-│   └── combined/           # Normalized CSVs (generated)
-├── scripts/                # All Python scripts
+│   └── combined/             # Normalized CSVs (generated)
+├── scripts/                  # All Python scripts
 └── README.md
 ```
 
 ## Quick Start
 
 ```bash
-# Regenerate static sites after data update
+# Regenerate static site after data update
 python scripts/generate_site.py
 
 # Or run the live Dash app
 python scripts/app.py
 ```
 
-Open `index.html` or `index-redux.html` in any browser — no dependencies needed at runtime.
+Open `index.html` in any browser — no dependencies needed at runtime.

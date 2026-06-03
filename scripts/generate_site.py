@@ -1,8 +1,8 @@
 """
-Generates self-contained static HTML pages with Plotly.js charts
+Generates a self-contained static HTML page with Plotly.js charts
 for the Georgia Power Large Load Economic Development Pipeline.
 Embeds all data as JSON — no server needed.
-Outputs: index.html (original), index-redux.html (redesigned)
+Output: index.html
 """
 import json
 from pathlib import Path
@@ -13,9 +13,6 @@ COMBINED_DIR = SCRIPT_DIR.parent / "outputs" / "combined"
 ROOT = SCRIPT_DIR.parent / "index.html"
 ROOT_TEMPLATE_FILE = SCRIPT_DIR.parent / "assets" / "index.template.html"
 ROOT_TEMPLATE = ROOT_TEMPLATE_FILE.read_text(encoding="utf-8") if ROOT_TEMPLATE_FILE.exists() else None
-REDUX = SCRIPT_DIR.parent / "index-redux.html"
-REDUX_TEMPLATE_FILE = SCRIPT_DIR.parent / "assets" / "index-redux.template.html"
-REDUX_TEMPLATE = REDUX_TEMPLATE_FILE.read_text(encoding="utf-8") if REDUX_TEMPLATE_FILE.exists() else None
 
 df_proj = pd.read_csv(COMBINED_DIR / "pipeline_projects.csv")
 df_changes = pd.read_csv(COMBINED_DIR / "pipeline_changes.csv")
@@ -111,7 +108,7 @@ METRIC_LABELS = {
 }
 
 # Load GPC load forecasts for reference line overlays
-df_fc = pd.read_csv(SCRIPT_DIR.parent / "GPC_Load_Forecasts.csv")
+df_fc = pd.read_csv(SCRIPT_DIR.parent / "inputs" / "GPC_Load_Forecasts.csv")
 _fc_desired = {
     "2023-IRP-update-w-LRM-minus-2023-IRP-base": "#d32f2f",
     "2025-IRP-base-minus-2023-IRP-base": "#1976d2",
@@ -171,11 +168,6 @@ def main():
         print(f"Generated {ROOT} ({ROOT.stat().st_size:,} bytes)")
     else:
         print("WARNING: index.template.html not found, skipping index.html generation")
-
-    if REDUX_TEMPLATE:
-        redux_html = REDUX_TEMPLATE.replace("__DATA_PLACEHOLDER__", json.dumps(EMBEDDED, indent=None, ensure_ascii=False, default=str))
-        REDUX.write_text(redux_html, encoding="utf-8")
-        print(f"Generated {REDUX} ({REDUX.stat().st_size:,} bytes)")
 
     print(f"  Rows: long={len(EMBEDDED['long'])}, changes={len(EMBEDDED['changes'])}, table={len(EMBEDDED['table'])}")
     print(f"  Added: {len(EMBEDDED['added'])}, Removed: {len(EMBEDDED['removed'])}")
