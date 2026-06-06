@@ -274,6 +274,16 @@
   }
   .help-tip:hover .tip-text { display: block; }
 
+  /* ── Playback controls ── */
+  .play-btn {
+    width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border);
+    background: var(--surface); color: var(--muted); font-size: 14px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: var(--transition);
+  }
+  .play-btn:hover { background: #f1f5f9; color: var(--text); }
+  .play-btn.active { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+
   /* ── Responsive ── */
   @media (max-width: 992px) {
     .filter-bar { flex-direction: column; gap: 12px; }
@@ -355,6 +365,15 @@
         </div>
       </div>
       <div class="pill-checkboxes" id="snap-forecasts"></div>
+    </div>
+    <div class="filter-group compact" style="margin-left:auto; align-self:center;">
+      <label style="text-align:center;">Animate</label>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <button class="play-btn" id="snap-prev" title="Previous quarter">&#9198;</button>
+        <button class="play-btn" id="snap-play" title="Play / Pause">&#9654;</button>
+        <button class="play-btn" id="snap-next" title="Next quarter">&#9197;</button>
+        <span id="snap-play-label" style="font-size:12px; color:var(--muted); min-width:60px; text-align:center;"></span>
+      </div>
     </div>
   </div>
 
@@ -592,6 +611,7 @@ function confidenceBadge(val) {
 
 // ── Tab switching ────────────────────────────────────────────────────────────
 function switchTab(tab) {
+  stopAnimation();
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
   document.getElementById(`tab-${tab}`).classList.add('active');
@@ -628,7 +648,11 @@ function addForecastTraces(traces, prefix) {
 }
 
 // ── Render: Snapshot ─────────────────────────────────────────────────────────
-function renderSnapshot() {
+const ALL_QUARTERS = [...new Set(D.map(r => r.report_quarter))].sort();
+const SNAP_PROJ_COLS = ['proj_id','project_stage','segment','territory','announced_load_mw','initial_service_date','project_age','match_confidence'];
+
+function renderSnapshot(opts) {
+  const animate = opts && opts.animate;
   const quarter = document.getElementById('snap-quarter').value;
   const stages = getChecked('snap-stages');
   const segments = getChecked('snap-segments');
@@ -636,11 +660,11 @@ function renderSnapshot() {
   if (!stages.length || !segments.length) {
     document.getElementById('snap-subtitle').textContent = '';
     Plotly.react('snap-chart', [], {});
-    buildTable('snap-table-wrap', [], ['proj_id','project_stage','segment','territory','announced_load_mw','initial_service_date','project_age','match_confidence']);
+    buildTable('snap-table-wrap', [], SNAP_PROJ_COLS);
     return;
   }
 
-  const filtered = D.filter(r => r.report_quarter === quarter && stages.includes(r.project_stage) && segments.includes(r.segment));
+  const filtered = D.filter(r => r.report_quarter === quarter && segments.includes(r.segment));
   const grouped = {};
   filtered.forEach(r => {
     const key = r.planning_year;
@@ -648,56 +672,123 @@ function renderSnapshot() {
     if (!grouped[key][r.project_stage]) grouped[key][r.project_stage] = 0;
     grouped[key][r.project_stage] += r.load_mw;
   });
-  const years = [...new Set(filtered.map(r => r.planning_year))].sort((a,b) => a-b);
 
-  const traces = STAGES.filter(s => stages.includes(s)).reverse().map(stage => ({
-    x: years,
-    y: years.map(y => grouped[y] && grouped[y][stage] ? grouped[y][stage] : 0),
+  // Always use full year range for consistent x-axis across animation frames
+  const traces = STAGES.slice().reverse().map(stage => ({
+    x: YEARS,
+    y: YEARS.map(y => (grouped[y] && grouped[y][stage]) || 0),
     name: stage,
     type: 'bar',
     marker: { color: STAGE_COLORS[stage] },
+    visible: stages.includes(stage) ? true : 'legendonly',
     hovertemplate: `<b>%{x}</b><br>${stage}: %{y:,.0f} MW<extra></extra>`,
   }));
+
+  // Lock y-axis to final quarter's peak for selected stages
+  let yaxisOpts = { title: 'Total Pipeline MW', tickformat: ',' };
+  if (animate) {
+    const finalQ = ALL_QUARTERS[ALL_QUARTERS.length - 1];
+    const finalData = D.filter(r => r.report_quarter === finalQ && stages.includes(r.project_stage) && segments.includes(r.segment));
+    const byYear = {};
+    finalData.forEach(r => { byYear[r.planning_year] = (byYear[r.planning_year] || 0) + r.load_mw; });
+    const finalMax = Math.max(0, ...Object.values(byYear));
+    yaxisOpts.range = [0, finalMax * 1.05];
+    yaxisOpts.autorange = false;
+  }
 
   const layout = {
     barmode: 'stack',
     xaxis: { title: 'Planning Year', tickmode: 'linear', dtick: 1 },
-    yaxis: { title: 'Total Pipeline MW', tickformat: ',' },
+    yaxis: yaxisOpts,
     legend: { orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1 },
     plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
     margin: { l: 60, r: 20, t: 40, b: 60 }, hovermode: 'x unified',
     height: 480,
   };
 
+  // Subtitle
+  const stageFiltered = D.filter(r => r.report_quarter === quarter && stages.includes(r.project_stage) && segments.includes(r.segment));
   const totalMw = {};
-  filtered.forEach(r => { totalMw[r.planning_year] = (totalMw[r.planning_year] || 0) + r.load_mw; });
+  stageFiltered.forEach(r => { totalMw[r.planning_year] = (totalMw[r.planning_year] || 0) + r.load_mw; });
   const peakEntries = Object.entries(totalMw).sort((a,b) => b[1] - a[1]);
   const peakYr = peakEntries.length ? peakEntries[0][0] : '&mdash;';
   const peakMw = peakEntries.length ? Number(peakEntries[0][1]).toLocaleString() : '&mdash;';
   document.getElementById('snap-subtitle').innerHTML = `${quarter} snapshot &middot; Peak planning year: <strong>${peakYr}</strong> at <strong>${peakMw} MW</strong> total`;
 
   const allTraces = addForecastTraces(traces, 'snap');
-  Plotly.react('snap-chart', allTraces, layout);
+
+  if (animate) {
+    Plotly.react('snap-chart', allTraces, layout, { transition: { duration: 800, easing: 'cubic-in-out' }, frame: { duration: 800 } });
+  } else {
+    Plotly.react('snap-chart', allTraces, layout);
+  }
 
   // Project table
-  const projCols = ['proj_id','project_stage','segment','territory','announced_load_mw','initial_service_date','project_age','match_confidence'];
   const projRows = TABLE.filter(r => r.report_quarter === quarter && stages.includes(r.project_stage) && segments.includes(r.segment));
-  buildTable('snap-table-wrap', projRows, projCols);
+  buildTable('snap-table-wrap', projRows, SNAP_PROJ_COLS);
 
   // Wire search
   const searchEl = document.getElementById('snap-table-search');
   searchEl.oninput = function() {
     const q = this.value.toLowerCase().trim();
     if (!q) {
-      buildTable('snap-table-wrap', projRows, projCols);
+      buildTable('snap-table-wrap', projRows, SNAP_PROJ_COLS);
       return;
     }
     const filteredRows = projRows.filter(r =>
       Object.values(r).some(v => v != null && String(v).toLowerCase().includes(q))
     );
-    buildTable('snap-table-wrap', filteredRows, projCols);
+    buildTable('snap-table-wrap', filteredRows, SNAP_PROJ_COLS);
   };
 }
+
+// ── Animation controller ─────────────────────────────────────────────────────
+let animTimer = null;
+let animIdx = 0;
+
+function stopAnimation() {
+  if (animTimer) { clearInterval(animTimer); animTimer = null; }
+  animIdx = 0;
+  const btn = document.getElementById('snap-play');
+  btn.classList.remove('active');
+  btn.innerHTML = '&#9654;';
+  document.getElementById('snap-play-label').textContent = '';
+}
+
+function playAnimation() {
+  stopAnimation();
+  const btn = document.getElementById('snap-play');
+  btn.classList.add('active');
+  btn.innerHTML = '&#9646;&#9646;';
+  const sel = document.getElementById('snap-quarter');
+
+  function step() {
+    if (animIdx >= ALL_QUARTERS.length) { stopAnimation(); return; }
+    sel.value = ALL_QUARTERS[animIdx];
+    renderSnapshot({ animate: true });
+    document.getElementById('snap-play-label').textContent = ALL_QUARTERS[animIdx];
+    animIdx++;
+  }
+
+  step();
+  animTimer = setInterval(step, 1500);
+}
+
+document.getElementById('snap-play').addEventListener('click', () => {
+  animTimer ? stopAnimation() : playAnimation();
+});
+document.getElementById('snap-prev').addEventListener('click', () => {
+  stopAnimation();
+  const sel = document.getElementById('snap-quarter');
+  const idx = ALL_QUARTERS.indexOf(sel.value);
+  if (idx > 0) { sel.value = ALL_QUARTERS[idx - 1]; renderSnapshot(); }
+});
+document.getElementById('snap-next').addEventListener('click', () => {
+  stopAnimation();
+  const sel = document.getElementById('snap-quarter');
+  const idx = ALL_QUARTERS.indexOf(sel.value);
+  if (idx < ALL_QUARTERS.length - 1) { sel.value = ALL_QUARTERS[idx + 1]; renderSnapshot(); }
+});
 
 // ── Render: Evolution ────────────────────────────────────────────────────────
 const QUARTER_COLORS = {};
@@ -962,17 +1053,18 @@ function buildTable(containerId, rows, cols) {
 }
 
 // ── Init controls ────────────────────────────────────────────────────────────
-// Snapshot
-buildSelect('snap-quarter', QUARTERS, renderSnapshot, '2026Q1');
-buildCheckboxes('snap-stages', STAGES, STAGES, renderSnapshot);
-buildCheckboxes('snap-segments', SEGMENTS, SEGMENTS, renderSnapshot);
-document.getElementById('snap-seg-all').addEventListener('click', () => { setAll('snap-segments', true); renderSnapshot(); });
-document.getElementById('snap-seg-none').addEventListener('click', () => { setAll('snap-segments', false); renderSnapshot(); });
-document.getElementById('snap-stage-all').addEventListener('click', () => { setAll('snap-stages', true); renderSnapshot(); });
-document.getElementById('snap-stage-none').addEventListener('click', () => { setAll('snap-stages', false); renderSnapshot(); });
-buildForecastCheckboxes('snap-forecasts', renderSnapshot);
-document.getElementById('snap-fc-all').addEventListener('click', () => { setAll('snap-forecasts', true); renderSnapshot(); });
-document.getElementById('snap-fc-none').addEventListener('click', () => { setAll('snap-forecasts', false); renderSnapshot(); });
+// Snapshot — filters auto-pause animation
+function snapFilterChange() { stopAnimation(); renderSnapshot(); }
+buildSelect('snap-quarter', QUARTERS, snapFilterChange, '2026Q1');
+buildCheckboxes('snap-stages', STAGES, STAGES, snapFilterChange);
+buildCheckboxes('snap-segments', SEGMENTS, SEGMENTS, snapFilterChange);
+document.getElementById('snap-seg-all').addEventListener('click', () => { setAll('snap-segments', true); snapFilterChange(); });
+document.getElementById('snap-seg-none').addEventListener('click', () => { setAll('snap-segments', false); snapFilterChange(); });
+document.getElementById('snap-stage-all').addEventListener('click', () => { setAll('snap-stages', true); snapFilterChange(); });
+document.getElementById('snap-stage-none').addEventListener('click', () => { setAll('snap-stages', false); snapFilterChange(); });
+buildForecastCheckboxes('snap-forecasts', snapFilterChange);
+document.getElementById('snap-fc-all').addEventListener('click', () => { setAll('snap-forecasts', true); snapFilterChange(); });
+document.getElementById('snap-fc-none').addEventListener('click', () => { setAll('snap-forecasts', false); snapFilterChange(); });
 
 // Evolution
 buildCheckboxes('evo-quarters', QUARTERS, QUARTERS, renderEvolution);

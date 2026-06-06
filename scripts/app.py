@@ -6,7 +6,8 @@ from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as _px
-from dash import Dash, dcc, html, Input, Output, dash_table, ctx
+import dash
+from dash import Dash, dcc, html, Input, Output, State, dash_table, ctx
 import dash_bootstrap_components as dbc
 
 # ---------------------------------------------------------------------------
@@ -190,6 +191,8 @@ app = Dash(
 )
 
 app.layout = html.Div([
+    dcc.Store(id='snap-anim-store', data={'playing': False}),
+    dcc.Interval(id='snap-anim-interval', interval=1500, disabled=True),
     html.Div([
         html.H2("Georgia Power Large Load Economic Development Pipeline",
                 style={"margin": "0", "fontWeight": "700", "fontSize": "22px", "color": "#1a1a2e"}),
@@ -225,6 +228,22 @@ app.layout = html.Div([
                         ),
                         html.Div(style={"marginTop": "12px"}),
                         *segment_checklist("snap"),
+                        html.Hr(),
+                        html.Label("Animate", style=LABEL_STYLE),
+                        html.Div([
+                            html.Button("⏮", id="snap-prev", n_clicks=0,
+                                        style={"width": "32px", "height": "32px", "borderRadius": "50%",
+                                               "border": "1px solid #ddd", "background": "#fff",
+                                               "cursor": "pointer", "fontSize": "14px"}),
+                            html.Button("▶", id="snap-play", n_clicks=0,
+                                        style={"width": "32px", "height": "32px", "borderRadius": "50%",
+                                               "border": "1px solid #ddd", "background": "#fff",
+                                               "cursor": "pointer", "fontSize": "14px", "margin": "0 4px"}),
+                            html.Button("⏭", id="snap-next", n_clicks=0,
+                                        style={"width": "32px", "height": "32px", "borderRadius": "50%",
+                                               "border": "1px solid #ddd", "background": "#fff",
+                                               "cursor": "pointer", "fontSize": "14px"}),
+                        ], style={"display": "flex", "alignItems": "center", "gap": "4px"}),
                     ]), width=3),
                     dbc.Col([
                         html.Div(id="snap-subtitle",
@@ -437,8 +456,9 @@ def toggle_snap_segments(*_):
     Input("snap-quarter", "value"),
     Input("snap-stages", "value"),
     Input("snap-segments", "value"),
+    Input("snap-anim-store", "data"),
 )
-def update_snapshot(quarter, stages, segments):
+def update_snapshot(quarter, stages, segments, anim_state):
     if not stages or not segments:
         return go.Figure(), "", []
 
@@ -452,8 +472,6 @@ def update_snapshot(quarter, stages, segments):
 
     fig = go.Figure()
     for stage in reversed(STAGES):
-        if stage not in stages:
-            continue
         s = (sub[sub["project_stage"] == stage]
              .groupby("planning_year")["load_mw"].sum()
              .reset_index()
@@ -461,18 +479,35 @@ def update_snapshot(quarter, stages, segments):
         fig.add_trace(go.Bar(
             x=s["planning_year"], y=s["load_mw"],
             name=stage, marker_color=STAGE_COLORS[stage],
+            visible=True if stage in stages else "legendonly",
             hovertemplate="<b>%{x}</b><br>" + stage + ": %{y:,.0f} MW<extra></extra>",
         ))
 
-    fig.update_layout(
+    yaxis = dict(title="Total Pipeline MW", tickformat=",")
+    if anim_state and anim_state.get("playing"):
+        final_q = QUARTERS_PRESENT[-1]
+        final_sub = df_long[
+            (df_long["report_quarter"] == final_q) &
+            (df_long["project_stage"].isin(stages)) &
+            (df_long["segment"].isin(segments))
+        ]
+        final_max = final_sub.groupby("planning_year")["load_mw"].sum().max()
+        if final_max > 0:
+            yaxis["range"] = [0, final_max * 1.05]
+            yaxis["autorange"] = False
+
+    layout_kwargs = dict(
         barmode="stack",
         xaxis=dict(title="Planning Year", tickmode="linear", dtick=1),
-        yaxis=dict(title="Total Pipeline MW", tickformat=","),
+        yaxis=yaxis,
         legend=dict(title="Pipeline Stage", orientation="h",
                     yanchor="bottom", y=1.02, xanchor="right", x=1),
         plot_bgcolor="#fafafa", paper_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=60, r=20, t=60, b=60), hovermode="x unified",
     )
+    if anim_state and anim_state.get("playing"):
+        layout_kwargs["transition"] = {"duration": 800, "easing": "cubic-in-out"}
+    fig.update_layout(**layout_kwargs)
 
     peak_yr = int(total_mw.idxmax()) if not total_mw.empty else "—"
     peak_mw = f"{total_mw.max():,.0f}" if not total_mw.empty else "—"
@@ -486,6 +521,64 @@ def update_snapshot(quarter, stages, segments):
        "announced_load_mw", "initial_service_date", "project_age", "match_confidence"]]
 
     return fig, subtitle, proj_sub.to_dict("records")
+
+
+@app.callback(
+    Output("snap-anim-interval", "disabled"),
+    Output("snap-anim-store", "data"),
+    Output("snap-play", "children"),
+    Input("snap-play", "n_clicks"),
+    Input("snap-prev", "n_clicks"),
+    Input("snap-next", "n_clicks"),
+    Input("snap-anim-interval", "n_intervals"),
+    Input("snap-stages", "value"),
+    Input("snap-segments", "value"),
+    State("snap-quarter", "value"),
+    State("snap-anim-store", "data"),
+    prevent_initial_call=True,
+)
+def toggle_snap_animation(play_nc, prev_nc, next_nc, n_intervals, stages, segments, quarter, anim_state):
+    triggered = ctx.triggered_id
+    state = dict(anim_state) if anim_state else {"playing": False}
+
+    if triggered in ("snap-stages", "snap-segments"):
+        state["playing"] = False
+        return True, state, "▶"
+
+    if triggered == "snap-play":
+        state["playing"] = not state.get("playing", False)
+        return not state["playing"], state, "⏸" if state["playing"] else "▶"
+
+    if triggered in ("snap-prev", "snap-next"):
+        state["playing"] = False
+        idx = QUARTERS_PRESENT.index(quarter) if quarter in QUARTERS_PRESENT else len(QUARTERS_PRESENT) - 1
+        if triggered == "snap-prev":
+            state["target"] = QUARTERS_PRESENT[max(0, idx - 1)]
+        else:
+            state["target"] = QUARTERS_PRESENT[min(len(QUARTERS_PRESENT) - 1, idx + 1)]
+        return True, state, "▶"
+
+    if triggered == "snap-anim-interval" and state.get("playing"):
+        idx = QUARTERS_PRESENT.index(quarter) if quarter in QUARTERS_PRESENT else -1
+        if idx < len(QUARTERS_PRESENT) - 1:
+            state["target"] = QUARTERS_PRESENT[idx + 1]
+            return False, state, "⏸"
+        else:
+            state["playing"] = False
+            return True, state, "▶"
+
+    return not state.get("playing", False), state, "⏸" if state.get("playing") else "▶"
+
+
+@app.callback(
+    Output("snap-quarter", "value", allow_duplicate=True),
+    Input("snap-anim-store", "data"),
+    prevent_initial_call=True,
+)
+def sync_snap_quarter(anim_state):
+    if anim_state and anim_state.get("target"):
+        return anim_state["target"]
+    return dash.no_update
 
 
 # ---------------------------------------------------------------------------
