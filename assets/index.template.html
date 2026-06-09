@@ -52,6 +52,17 @@
   }
   .info-btn:hover { background: #e2e8f0; color: var(--text); }
 
+  /* ── Export button ── */
+  .export-btn {
+    background: #f1f5f9; border: 1px solid var(--border);
+    color: var(--muted); padding: 6px 14px; border-radius: 6px;
+    font-size: 12px; cursor: pointer; transition: var(--transition); font-weight: 500;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .export-btn:hover { background: #e2e8f0; color: var(--text); border-color: #cbd5e1; }
+  .export-btn:disabled { opacity: 0.5; cursor: wait; }
+  .export-btn svg { width: 12px; height: 12px; }
+
   /* Info panel */
   #info-panel {
     display: none; background: #fff; border-radius: var(--radius);
@@ -378,7 +389,15 @@
   </div>
 
   <div class="chart-subtitle" id="snap-subtitle"></div>
-  <div class="card"><div id="snap-chart"></div></div>
+  <div class="card">
+    <div style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:8px;">
+      <button class="export-btn" id="snap-export" title="Download this chart as a PNG image">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 11l-4-4h2.5V2h3v5H12L8 11zm-6 3v-2h12v2H2z"/></svg>
+        Export this graph
+      </button>
+    </div>
+    <div id="snap-chart"></div>
+  </div>
   <div class="card">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
       <div style="font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px;">
@@ -451,7 +470,7 @@
 <!-- Tab 3: Changes -->
 <div class="tab-content" id="tab-changes">
   <div class="card" style="display:flex; align-items:center; gap:24px; flex-wrap:wrap;">
-    <div style="font-size:10px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px;">Aggregate Metric</div>
+    <div style="font-size:10px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px;">Metric</div>
     <div class="pill-checkboxes" id="chg-metrics" style="max-height:none;"></div>
   </div>
   <div class="card"><div id="chg-chart"></div></div>
@@ -459,7 +478,7 @@
     <div style="font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:10px;">
       Full quarterly change summary
       <span class="help-tip">&#9432;
-        <span class="tip-text">Positive values are green, negative values are red.</span>
+        <span class="tip-text">Per-quarter aggregate values for reference.</span>
       </span>
     </div>
     <div class="table-wrap" id="chg-table-wrap"></div>
@@ -515,7 +534,15 @@
     </div>
   </div>
   <div class="chart-subtitle" id="vint-subtitle"></div>
-  <div class="card"><div id="vint-chart"></div></div>
+  <div class="card">
+    <div style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:8px;">
+      <button class="export-btn" id="vint-export" title="Download this chart as a PNG image">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 11l-4-4h2.5V2h3v5H12L8 11zm-6 3v-2h12v2H2z"/></svg>
+        Export this graph
+      </button>
+    </div>
+    <div id="vint-chart"></div>
+  </div>
 </div>
 
 <script>
@@ -529,9 +556,15 @@ const ADDED = DATA.added;
 const REMOVED = DATA.removed;
 const FORECASTS = DATA.forecasts || [];
 const FORECAST_IDS = FORECASTS.map(f => f.id);
+const QOOQ_EVENTS = DATA.qoq_events || { load_changes: [], stage_transitions: [], schedule_delays: [] };
+const DIVERGING = DATA.diverging || [];
+const STAGE_BY_DIR = DATA.stage_by_direction || [];
+const SANKEY_GRID = DATA.sankey_grid || { nodes: [], links: [], hidden_node_ids: [] };
+const STAGE_CHANGE_DIRECTIONS = DATA.stage_change_directions || [];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const QUARTERS = META.quarters;
+const QUARTERS_ALL = META.quarters_all || QUARTERS;
 const STAGES = META.stages;
 const SEGMENTS = META.segments;
 const YEARS = META.years;
@@ -540,6 +573,9 @@ const STAGE_COLORS = META.stage_colors;
 const VINTAGE_COLORS = META.vintage_colors;
 const METRIC_LABELS = META.metric_labels;
 const FORECAST_LABELS = META.forecast_labels || {};
+const LOAD_CHANGE_BINS = META.load_change_bins || [];
+const LOAD_CHANGE_STACK_BINS = META.load_change_stack_bins || [];
+const DELAY_BINS = META.delay_bins || [];
 
 function vintBucket(age) { return age === 1 ? 2 : age <= 3 ? 1 : 0; }
 
@@ -618,7 +654,7 @@ function switchTab(tab) {
   document.querySelector(`.tab-btn[data-tab="${tab}"]`).classList.add('active');
   if (tab === 'snapshot') renderSnapshot();
   if (tab === 'evolution') renderEvolution();
-  if (tab === 'changes') renderChanges();
+  if (tab === 'changes') { renderChanges(); }
   if (tab === 'vintage') renderVintage();
 }
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -698,11 +734,16 @@ function renderSnapshot(opts) {
 
   const layout = {
     barmode: 'stack',
+    title: {
+      text: `Georgia Power Company large load pipeline by stage (${quarter})`,
+      x: 0.5, xanchor: 'center', y: 0.96, yanchor: 'top',
+      font: { size: 20, weight: 700, color: '#0f172a', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif' }
+    },
     xaxis: { title: 'Planning Year', tickmode: 'linear', dtick: 1 },
     yaxis: yaxisOpts,
     legend: { orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1 },
     plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
-    margin: { l: 60, r: 20, t: 40, b: 60 }, hovermode: 'x unified',
+    margin: { l: 60, r: 20, t: 70, b: 60 }, hovermode: 'x unified',
     height: 480,
   };
 
@@ -862,56 +903,249 @@ function renderEvolution() {
   Plotly.react('evo-chart', traces, layout);
 }
 
-// ── Render: Changes ──────────────────────────────────────────────────────────
+// ── Render: Changes (dispatcher) ─────────────────────────────────────────────
 function renderChanges() {
   const metric = document.querySelector('#chg-metrics input[type="radio"]:checked').value;
-  const flowMetrics = ['added_projects','added_mw','removed_projects','removed_mw'];
-  const qs = QUARTERS.filter(q => q !== '2024Q1');
+  if (metric === 'load_change_dist') return renderLoadChangeStacked();
+  if (metric === 'projects_added_removed_count') return renderDiverging('count');
+  if (metric === 'projects_added_removed_mw') return renderDiverging('mw');
+  if (metric === 'stage_changes_by_direction') return renderStageByDirection();
+  if (metric === 'schedule_delay_dist') return renderDelayStacked();
+  if (metric === 'pipeline_stage_flow') return renderSankey();
+}
 
-  if (flowMetrics.includes(metric)) {
-    const df = metric.startsWith('added') ? ADDED : REMOVED;
-    const view = metric.endsWith('_mw') ? 'mw' : 'count';
-    const unit = view === 'mw' ? 'MW' : 'projects';
-    const ylabel = view === 'mw' ? 'Announced MW' : 'Project Count';
-    const traces = [];
-    STAGES.slice().reverse().forEach(stage => {
-      const colors = VINTAGE_COLORS[stage];
-      VINTAGE_LABELS.forEach((vlabel, vidx) => {
-        const mask = df.filter(r => qs.includes(r.report_quarter) && r.project_stage === stage && r.vintage_label === vlabel);
-        if (!mask.length) return;
-        const vals = qs.map(q => {
-          const items = mask.filter(r => r.report_quarter === q);
-          if (view === 'mw') return items.reduce((s, r) => s + (r.announced_load_mw || 0), 0);
-          return items.length;
-        });
-        if (vals.every(v => v === 0)) return;
-        traces.push({ x: qs, y: vals, type: 'bar',
-          name: `${stage.slice(0,3)}\u2026 \u00b7 ${vlabel}`,
-          marker: { color: colors[vidx] }, legendgroup: stage, legendgrouptitle: { text: stage },
-          hovertemplate: `<b>%{x}</b><br>${stage}<br>${vlabel}: %{y:,.0f} ${unit}<extra></extra>` });
+// ── Changes: Load Change stacked bar (per quarter, by MW magnitude bin) ──────
+function renderLoadChangeStacked() {
+  const events = QOOQ_EVENTS.load_changes || [];
+  const bins = LOAD_CHANGE_STACK_BINS;
+  const quarters = QUARTERS;
+  const traces = bins.map(b => ({
+    x: quarters,
+    y: quarters.map(q => events.filter(e => e.quarter === q && e.change_mw >= b.lo && e.change_mw < b.hi).length),
+    type: 'bar',
+    name: b.label,
+    marker: { color: b.color },
+    hovertemplate: `<b>%{x}</b><br>${b.label}: %{y} changes<extra></extra>`,
+  }));
+  const layout = {
+    title: {
+      text: 'Pipeline load changes by long-term MW magnitude, Q1 2024 – Q1 2026',
+      x: 0.5, xanchor: 'center', y: 0.96, yanchor: 'top',
+      font: { size: 20, weight: 700, color: '#0f172a', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif' }
+    },
+    barmode: 'stack',
+    xaxis: { title: 'Report Quarter' },
+    yaxis: { title: 'Number of load changes', tickformat: ',' },
+    legend: { orientation: 'v', x: 1.01, y: 1, font: { size: 10 } },
+    plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
+    margin: { l: 60, r: 200, t: 80, b: 50 }, height: 460, hovermode: 'x unified',
+  };
+  Plotly.react('chg-chart', traces, layout);
+}
+
+// ── Changes: Diverging bar (added above 0, removed below 0) ──────────────────
+function renderDiverging(view) {
+  const unit = view === 'mw' ? 'long-term MW' : 'projects';
+  const titleSuffix = view === 'mw' ? 'long-term MW' : 'count';
+  const quarters = QUARTERS;
+
+  // Build per-quarter per-(stage, vintage) totals
+  const added = {};  // quarter → (stage, vintage) → value
+  const removed = {};
+  for (const r of DIVERGING) {
+    const val = view === 'mw' ? r.mw : r.count;
+    const bucket = r.direction === 'added' ? added : removed;
+    if (!bucket[r.quarter]) bucket[r.quarter] = {};
+    const key = r.stage + '|' + r.vintage;
+    bucket[r.quarter][key] = (bucket[r.quarter][key] || 0) + val;
+  }
+
+  // Trace key: stage (added = all vintages merged) or stage + vintage for removed
+  const traces = [];
+  STAGES.slice().reverse().forEach(stage => {
+    // Added trace (always vintage = "New (1 qtr)")
+    const yValsAdded = quarters.map(q => {
+      const v = (added[q] || {})[stage + '|New (1 qtr)'];
+      return v != null ? v : 0;
+    });
+    traces.push({
+      x: quarters, y: yValsAdded, type: 'bar',
+      name: `Added · ${stage}`,
+      marker: { color: STAGE_COLORS[stage] },
+      legendgroup: stage, legendgrouptitle: { text: stage + ' (added)' },
+      hovertemplate: `<b>%{x}</b><br>${stage} (added): %{y:,.0f} ${unit}<extra></extra>`,
+    });
+    // Removed traces by vintage
+    VINTAGE_LABELS.forEach((vlabel, vidx) => {
+      const yVals = quarters.map(q => {
+        const v = (removed[q] || {})[stage + '|' + vlabel];
+        return v != null ? -v : 0;  // negative for below axis
+      });
+      if (yVals.every(v => v === 0)) return;
+      traces.push({
+        x: quarters, y: yVals, type: 'bar',
+        name: `Removed · ${stage} · ${vlabel}`,
+        marker: { color: VINTAGE_COLORS[stage][vidx] },
+        legendgroup: stage, legendgrouptitle: { text: stage + ' (removed)' },
+        hovertemplate: `<b>%{x}</b><br>${stage} (removed, ${vlabel}): %{y:,.0f} ${unit}<extra></extra>`,
       });
     });
-    const layout = {
-      barmode: 'stack', xaxis: { title: 'Report Quarter' }, yaxis: { title: ylabel, tickformat: ',' },
-      legend: { groupclick: 'toggleitem', orientation: 'v', x: 1.01, y: 1, font: { size: 11 } },
-      plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
-      margin: { l: 60, r: 200, t: 20, b: 50 }, height: 400,
-    };
-    Plotly.react('chg-chart', traces, layout);
-  } else {
-    const sub = CHANGES.filter(r => r[metric] != null).sort((a,b) => QUARTERS.indexOf(a.report_quarter) - QUARTERS.indexOf(b.report_quarter));
-    const colors = sub.map(r => r[metric] < 0 ? '#c62828' : r[metric] > 0 ? '#2e7d32' : '#999');
-    const trace = { x: sub.map(r => r.report_quarter), y: sub.map(r => r[metric]),
-      type: 'bar', marker: { color: colors },
-      hovertemplate: `<b>%{x}</b><br>${METRIC_LABELS[metric]}: %{y:,.1f}<extra></extra>` };
-    const layout = {
-      xaxis: { title: 'Report Quarter' }, yaxis: { title: METRIC_LABELS[metric], tickformat: ',' },
-      shapes: [{ type: 'line', x0: -0.5, x1: sub.length - 0.5, y0: 0, y1: 0, line: { color: '#888', width: 1 } }],
-      plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
-      margin: { l: 60, r: 20, t: 20, b: 50 }, height: 400,
-    };
-    Plotly.react('chg-chart', [trace], layout);
+  });
+
+  const layout = {
+    title: {
+      text: `Pipeline projects added and removed (${titleSuffix}), Q1 2024 – Q1 2026`,
+      x: 0.5, xanchor: 'center', y: 0.96, yanchor: 'top',
+      font: { size: 20, weight: 700, color: '#0f172a', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif' }
+    },
+    barmode: 'relative',
+    xaxis: { title: 'Report Quarter' },
+    yaxis: { title: view === 'mw' ? 'Long-term MW' : 'Project Count', tickformat: ',', zeroline: true, zerolinecolor: '#888', zerolinewidth: 1 },
+    legend: { groupclick: 'toggleitem', orientation: 'v', x: 1.01, y: 1, font: { size: 10 } },
+    plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
+    margin: { l: 60, r: 200, t: 80, b: 50 }, height: 460, hovermode: 'x unified',
+  };
+  Plotly.react('chg-chart', traces, layout);
+}
+
+// ── Changes: Stage changes by direction (stacked bar per quarter) ─────────────
+function renderStageByDirection() {
+  const quarters = QUARTERS;
+  const directions = STAGE_CHANGE_DIRECTIONS;
+  // Color by from_stage
+  const dirColors = {};
+  directions.forEach(d => {
+    const from = d.split(' → ')[0];
+    dirColors[d] = STAGE_COLORS[from] || '#999';
+  });
+  const traces = directions.map(dir => ({
+    x: quarters,
+    y: quarters.map(q => {
+      const r = STAGE_BY_DIR.find(x => x.quarter === q && x.from_stage + ' → ' + x.to_stage === dir);
+      return r ? r.count : 0;
+    }),
+    type: 'bar',
+    name: dir,
+    marker: { color: dirColors[dir] },
+    hovertemplate: `<b>%{x}</b><br>${dir}: %{y} projects<extra></extra>`,
+  }));
+  const layout = {
+    title: {
+      text: 'Pipeline stage transitions by direction, Q1 2024 – Q1 2026',
+      x: 0.5, xanchor: 'center', y: 0.96, yanchor: 'top',
+      font: { size: 20, weight: 700, color: '#0f172a', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif' }
+    },
+    barmode: 'stack',
+    xaxis: { title: 'Report Quarter' },
+    yaxis: { title: 'Number of stage transitions', tickformat: ',' },
+    legend: { orientation: 'v', x: 1.01, y: 1, font: { size: 10 } },
+    plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
+    margin: { l: 60, r: 200, t: 80, b: 50 }, height: 460, hovermode: 'x unified',
+  };
+  Plotly.react('chg-chart', traces, layout);
+}
+
+// ── Changes: Schedule delay stacked bar (per quarter, by delay bin) ──────────
+function renderDelayStacked() {
+  const events = QOOQ_EVENTS.schedule_delays || [];
+  const bins = DELAY_BINS;
+  const quarters = QUARTERS;
+  const delayColors = ['#fbbf24', '#f97316', '#dc2626', '#991b1b', '#7f1d1d'];
+  const traces = bins.map((b, i) => ({
+    x: quarters,
+    y: quarters.map(q => events.filter(e => e.quarter === q && e.delay_months >= b.lo && e.delay_months < b.hi).length),
+    type: 'bar',
+    name: b.label + ' months',
+    marker: { color: delayColors[i % delayColors.length] },
+    hovertemplate: `<b>%{x}</b><br>${b.label} months delay: %{y} changes<extra></extra>`,
+  }));
+  const layout = {
+    title: {
+      text: 'Pipeline schedule delay distribution, Q1 2024 – Q1 2026',
+      x: 0.5, xanchor: 'center', y: 0.96, yanchor: 'top',
+      font: { size: 20, weight: 700, color: '#0f172a', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif' }
+    },
+    barmode: 'stack',
+    xaxis: { title: 'Report Quarter' },
+    yaxis: { title: 'Number of schedule changes', tickformat: ',' },
+    legend: { orientation: 'v', x: 1.01, y: 1, font: { size: 10 } },
+    plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
+    margin: { l: 60, r: 200, t: 80, b: 50 }, height: 460, hovermode: 'x unified',
+  };
+  Plotly.react('chg-chart', traces, layout);
+}
+
+// ── Changes: Sankey diagram (exploded grid: stages × quarters) ───────────────
+function renderSankey() {
+  const nodes = SANKEY_GRID.nodes || [];
+  const links = SANKEY_GRID.links || [];
+  const hiddenIds = new Set(SANKEY_GRID.hidden_node_ids || []);
+  if (!nodes.length || !links.length) {
+    Plotly.react('chg-chart', [], {});
+    return;
   }
+
+  const nodeIds = nodes.map(n => n.id);
+  const nodeIdx = {};
+  nodeIds.forEach((id, i) => { nodeIdx[id] = i; });
+
+  const linkSource = [], linkTarget = [], linkValue = [], linkLabel = [], linkColor = [];
+  for (const l of links) {
+    if (l.source in nodeIdx && l.target in nodeIdx) {
+      linkSource.push(nodeIdx[l.source]);
+      linkTarget.push(nodeIdx[l.target]);
+      linkValue.push(l.value);
+      const isHidden = hiddenIds.has(l.source) || hiddenIds.has(l.target);
+      const srcNode = nodes[nodeIdx[l.source]];
+      const tgtNode = nodes[nodeIdx[l.target]];
+      linkLabel.push(`${srcNode.label} (${l.source.split('|')[1] || ''}) \u2192 ${tgtNode.label} (${l.target.split('|')[1] || ''}): ${l.value}`);
+      linkColor.push(isHidden ? 'rgba(0,0,0,0)' : (srcNode.color || '#999'));
+    }
+  }
+
+  // For each node, build a richer label that includes the quarter (column position)
+  const nodeLabel = nodes.map(n => {
+    const q = n.id.split('|')[1] || '';
+    return q ? `${n.label}<br><span style="font-size:9px; color:#94a3b8;">${q}</span>` : n.label;
+  });
+  const nodeColor = nodes.map(n => n.color);
+  const nodeX = nodes.map(n => n.x);
+  const nodeY = nodes.map(n => n.y);
+  const nodeCustomdata = nodes.map(n => ({ hidden: hiddenIds.has(n.id) }));
+
+  const data = [{
+    type: 'sankey',
+    orientation: 'h',
+    node: {
+      arrangement: 'fixed',
+      x: nodeX,
+      y: nodeY,
+      label: nodeLabel,
+      color: nodeColor,
+      customdata: nodeCustomdata,
+      pad: 8,
+      thickness: 10,
+      line: { color: '#fff', width: 0.5 },
+      hovertemplate: '%{label}<extra></extra>',
+    },
+    link: {
+      source: linkSource, target: linkTarget, value: linkValue,
+      label: linkLabel,
+      color: linkColor,
+      hovertemplate: '%{label} projects<extra></extra>',
+    },
+  }];
+  const layout = {
+    title: {
+      text: 'Pipeline stage flow by quarter, Q1 2024 \u2013 Q1 2026',
+      x: 0.5, xanchor: 'center', y: 0.97, yanchor: 'top',
+      font: { size: 20, weight: 700, color: '#0f172a', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif' }
+    },
+    font: { size: 10 },
+    plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
+    margin: { l: 20, r: 20, t: 80, b: 30 }, height: 640,
+  };
+  Plotly.react('chg-chart', data, layout);
 }
 
 // ── Render: Vintage ──────────────────────────────────────────────────────────
@@ -962,14 +1196,106 @@ function renderVintage() {
   document.getElementById('vint-subtitle').innerHTML = `${quarter} snapshot by vintage &middot; Peak: <strong>${peakYr}</strong> at <strong>${peakMw} MW</strong>`;
 
   const layout = {
-    barmode: 'stack', xaxis: { title: 'Planning Year', tickmode: 'linear', dtick: 1 },
+    barmode: 'stack',
+    title: {
+      text: `Georgia Power Company large load pipeline by stage and vintage (${quarter})`,
+      x: 0.5, xanchor: 'center', y: 0.96, yanchor: 'top',
+      font: { size: 20, weight: 700, color: '#0f172a', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif' }
+    },
+    xaxis: { title: 'Planning Year', tickmode: 'linear', dtick: 1 },
     yaxis: { title: 'Total Pipeline MW', tickformat: ',' },
     legend: { groupclick: 'toggleitem', orientation: 'v', x: 1.01, y: 1, font: { size: 11 } },
     plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
-    margin: { l: 60, r: 220, t: 40, b: 60 }, hovermode: 'x unified', height: 480,
+    margin: { l: 60, r: 220, t: 70, b: 60 }, hovermode: 'x unified', height: 480,
   };
   const allTraces = addForecastTraces(traces, 'vint');
   Plotly.react('vint-chart', allTraces, layout);
+}
+
+// ── Export: Blog-optimized PNG ────────────────────────────────────────────────
+// Renders the current chart to a hidden div with larger fonts + narrower width,
+// exports as PNG, then cleans up. Designed for blog/website integration.
+async function exportGraphAsImage(divId, filename) {
+  const btn = document.getElementById(divId === 'snap-chart' ? 'snap-export' : 'vint-export');
+  if (btn) { btn.disabled = true; }
+  try {
+    const gd = document.getElementById(divId);
+    const traces = gd.data;
+    const origLayout = gd.layout;
+
+    // Blog-friendly dimensions: narrower than the full responsive container
+    const exportWidth = 900;
+    const origHeight = origLayout.height || 480;
+    const origWidth = gd.offsetWidth || 1200;
+    const exportHeight = Math.max(420, Math.round(exportWidth * (origHeight / origWidth)));
+
+    // Build an export layout: larger fonts on title, axes, and legend
+    const axisTitle = origLayout.xaxis && origLayout.xaxis.title;
+    const yAxisTitle = origLayout.yaxis && origLayout.yaxis.title;
+    const exportLayout = JSON.parse(JSON.stringify({
+      ...origLayout,
+      width: exportWidth,
+      height: exportHeight,
+      autosize: false,
+        title: {
+          ...(origLayout.title || {}),
+          font: { size: 28, weight: 700, color: '#0f172a', family: 'Arial, Helvetica, sans-serif' }
+        },
+      xaxis: {
+        ...origLayout.xaxis,
+        title: { ...(typeof axisTitle === 'string' ? { text: axisTitle } : (axisTitle || {})), font: { size: 18, color: '#0f172a' } },
+        tickfont: { size: 15, color: '#334155' },
+      },
+      yaxis: {
+        ...origLayout.yaxis,
+        title: { ...(typeof yAxisTitle === 'string' ? { text: yAxisTitle } : (yAxisTitle || {})), font: { size: 18, color: '#0f172a' } },
+        tickfont: { size: 15, color: '#334155' },
+      },
+      legend: {
+        ...(origLayout.legend || {}),
+        font: { size: 15, color: '#0f172a' },
+        bgcolor: 'rgba(255,255,255,0.6)',
+        bordercolor: '#e2e8f0',
+        borderwidth: 1,
+      },
+      margin: { l: 90, r: 110, t: 90, b: 80 },
+      paper_bgcolor: '#ffffff',
+      plot_bgcolor: '#fafafa',
+    }));
+
+    // Render to a hidden off-screen div
+    const exportDiv = document.createElement('div');
+    exportDiv.style.position = 'absolute';
+    exportDiv.style.left = '-99999px';
+    exportDiv.style.top = '0';
+    exportDiv.style.width = exportWidth + 'px';
+    document.body.appendChild(exportDiv);
+
+    await Plotly.react(exportDiv, traces, exportLayout, { staticPlot: true, displayModeBar: false });
+    // Give Plotly a tick to fully apply layout before snapshotting
+    await new Promise(r => setTimeout(r, 50));
+
+    const dataUrl = await Plotly.toImage(exportDiv, {
+      format: 'png',
+      width: exportWidth,
+      height: exportHeight,
+    });
+
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = filename + '.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    Plotly.purge(exportDiv);
+    document.body.removeChild(exportDiv);
+  } catch (err) {
+    console.error('Export failed:', err);
+    alert('Export failed: ' + (err && err.message ? err.message : err));
+  } finally {
+    if (btn) { btn.disabled = false; }
+  }
 }
 
 // ── Enhanced Table Builder ───────────────────────────────────────────────────
@@ -1094,7 +1420,7 @@ document.getElementById('evo-seg-none').addEventListener('click', () => { setAll
 // Changes
 const chgMetrics = document.getElementById('chg-metrics');
 chgMetrics.innerHTML = Object.entries(METRIC_LABELS).map(([k,v]) =>
-  `<label><input type="radio" name="chg-metric" value="${k}" ${k === 'net_mw' ? 'checked' : ''}> ${v}</label>`
+  `<label><input type="radio" name="chg-metric" value="${k}" ${k === 'load_change_dist' ? 'checked' : ''}> ${v}</label>`
 ).join('');
 chgMetrics.querySelectorAll('input[type="radio"]').forEach(el => el.addEventListener('change', renderChanges));
 
@@ -1115,6 +1441,16 @@ document.getElementById('vint-seg-none').addEventListener('click', () => { setAl
 buildForecastCheckboxes('vint-forecasts', renderVintage);
 document.getElementById('vint-fc-all').addEventListener('click', () => { setAll('vint-forecasts', true); renderVintage(); });
 document.getElementById('vint-fc-none').addEventListener('click', () => { setAll('vint-forecasts', false); renderVintage(); });
+
+// Export buttons
+document.getElementById('snap-export').addEventListener('click', () => {
+  const q = document.getElementById('snap-quarter').value;
+  exportGraphAsImage('snap-chart', `ga-power-pipeline-by-stage-${q}`);
+});
+document.getElementById('vint-export').addEventListener('click', () => {
+  const q = document.getElementById('vint-quarter').value;
+  exportGraphAsImage('vint-chart', `ga-power-pipeline-by-stage-and-vintage-${q}`);
+});
 
 // ── Initial render ───────────────────────────────────────────────────────────
 renderSnapshot();
