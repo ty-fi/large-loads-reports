@@ -178,9 +178,9 @@ EMBEDDED = {
 - Deep navy: `#1c355e`
 
 ### Stage colors (per current code — see "Gotchas" below)
-- Technical Review: `#5B8DB8` (blue)
-- Request for Service: `#E8963A` (orange)
-- Contract for Electric Service: `#4CAF7D` (green)
+- Technical Review: `#9bcce3` (light blue)
+- Request for Service: `#529cba` (mid blue)
+- Contract for Electric Service: `#005d7f` (dark navy blue)
 
 ### Vintage labels
 - `New (1 qtr)` — project_age == 1
@@ -193,8 +193,9 @@ EMBEDDED = {
 - Contract for Electric Service: `#2A7A55` → `#4CAF7D` → `#8ED4B0`
 
 ### Python environment
-- Python 3.13 (pandas 3.0.1 installed) — use `C:\Users\fitch\AppData\Local\Programs\Python\Python313\python.exe`
-- Default `python` on PATH is 3.11 (no pandas) — explicitly use the 3.13 path
+- A `.venv` at the repo root has Python 3.13 + pandas. Use `.venv\Scripts\python.exe scripts/generate_site.py` to regenerate.
+- Created with `uv venv .venv --python 3.13 && uv pip install pandas --python .venv\Scripts\python.exe`
+- Default `python` on PATH is 3.12 (no pandas) — always use the venv.
 
 ## Gotchas (things that aren't obvious)
 
