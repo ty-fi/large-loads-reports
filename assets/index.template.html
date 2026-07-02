@@ -6,6 +6,20 @@
 <title>GA Power Large Load Pipeline</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
+  @font-face {
+    font-family: 'Interstate Bold';
+    src: url('assets/interstate-bold.woff2') format('woff2');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'Interstate';
+    src: url('assets/Interstate-regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+  }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     --rmi-teal: #56c4c4;
@@ -721,7 +735,13 @@ function renderSnapshot(opts) {
   }));
 
   // Lock y-axis to final quarter's peak for selected stages
-  let yaxisOpts = { title: 'Total Pipeline MW', tickformat: ',' };
+  let yaxisOpts = {
+    title: { text: 'Total Pipeline (MW)', font: { size: 13, color: '#475569', weight: 700, family: "'Interstate Bold', Arial, sans-serif" }, standoff: 12 },
+    tickformat: ',',
+    tickfont: { size: 12, color: '#334155', family: "'Interstate', Arial, sans-serif" },
+    gridcolor: 'rgba(0,0,0,0.07)',
+    zeroline: false,
+  };
   if (animate) {
     const finalQ = ALL_QUARTERS[ALL_QUARTERS.length - 1];
     const finalData = D.filter(r => r.report_quarter === finalQ && stages.includes(r.project_stage) && segments.includes(r.segment));
@@ -734,16 +754,24 @@ function renderSnapshot(opts) {
 
   const layout = {
     barmode: 'stack',
+    font: { family: "'Interstate', Arial, sans-serif" },
     title: {
-      text: `Georgia Power Company large load pipeline by stage (${quarter})`,
-      x: 0.5, xanchor: 'center', y: 0.96, yanchor: 'top',
-      font: { size: 20, weight: 700, color: '#0f172a', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif' }
+      text: `Georgia Power Company large load pipeline, by stage (${quarter})`,
+      x: 0.5, xanchor: 'center', y: 0.98, yanchor: 'top',
+      font: { size: 14, weight: 700, color: '#0f172a', family: "'Interstate Bold', Arial, sans-serif" }
     },
-    xaxis: { title: 'Planning Year', tickmode: 'linear', dtick: 1 },
+    xaxis: {
+      title: { text: 'Planning Year', font: { size: 13, color: '#475569', weight: 700, family: "'Interstate Bold', Arial, sans-serif" } },
+      tickmode: 'linear', dtick: 1,
+      tickfont: { size: 12, color: '#334155', family: "'Interstate', Arial, sans-serif" },
+      tickpad: 8,
+      showgrid: false,
+      showline: true, linecolor: '#e2e8f0',
+    },
     yaxis: yaxisOpts,
-    legend: { orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1 },
-    plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
-    margin: { l: 60, r: 20, t: 70, b: 60 }, hovermode: 'x unified',
+    legend: { orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1, font: { family: "'Interstate', Arial, sans-serif", size: 12 } },
+    plot_bgcolor: 'rgba(0,0,0,0)', paper_bgcolor: 'rgba(0,0,0,0)',
+    margin: { l: 70, r: 20, t: 90, b: 60 }, hovermode: 'x unified',
     height: 480,
   };
 
@@ -1215,6 +1243,27 @@ function renderVintage() {
 // ── Export: Blog-optimized PNG ────────────────────────────────────────────────
 // Renders the current chart to a hidden div with larger fonts + narrower width,
 // exports as PNG, then cleans up. Designed for blog/website integration.
+
+// Fetch and cache Interstate fonts as base64 so they survive SVG serialization.
+// Plotly exports via SVG→canvas and the page's @font-face doesn't carry over;
+// injecting font data into the SVG's own <defs> is the fix.
+let _exportFontCSS = null;
+async function _getExportFontCSS() {
+  if (_exportFontCSS) return _exportFontCSS;
+  async function toBase64(url) {
+    const buf = await fetch(url).then(r => r.arrayBuffer());
+    let bin = ''; new Uint8Array(buf).forEach(b => bin += String.fromCharCode(b));
+    return btoa(bin);
+  }
+  const [bold, regular] = await Promise.all([
+    toBase64('assets/interstate-bold.woff2'),
+    toBase64('assets/Interstate-regular.woff2'),
+  ]);
+  _exportFontCSS = `@font-face{font-family:'Interstate Bold';src:url('data:font/woff2;base64,${bold}')format('woff2');font-weight:700}`
+    + `@font-face{font-family:'Interstate';src:url('data:font/woff2;base64,${regular}')format('woff2');font-weight:400}`;
+  return _exportFontCSS;
+}
+
 async function exportGraphAsImage(divId, filename) {
   const btn = document.getElementById(divId === 'snap-chart' ? 'snap-export' : 'vint-export');
   if (btn) { btn.disabled = true; }
@@ -1237,30 +1286,33 @@ async function exportGraphAsImage(divId, filename) {
       width: exportWidth,
       height: exportHeight,
       autosize: false,
-        title: {
-          ...(origLayout.title || {}),
-          font: { size: 28, weight: 700, color: '#0f172a', family: 'Arial, Helvetica, sans-serif' }
-        },
+      font: { family: "'Interstate', Arial, sans-serif" },
+      title: {
+        ...(origLayout.title || {}),
+        y: 0.96, yanchor: 'top',
+        font: { size: 20, weight: 700, color: '#0f172a', family: "'Interstate Bold', Arial, sans-serif" }
+      },
       xaxis: {
         ...origLayout.xaxis,
-        title: { ...(typeof axisTitle === 'string' ? { text: axisTitle } : (axisTitle || {})), font: { size: 18, color: '#0f172a' } },
-        tickfont: { size: 15, color: '#334155' },
+        title: { ...(typeof axisTitle === 'string' ? { text: axisTitle } : (axisTitle || {})), font: { size: 16, color: '#475569', weight: 700, family: "'Interstate Bold', Arial, sans-serif" } },
+        tickfont: { size: 14, color: '#334155', family: "'Interstate', Arial, sans-serif" },
       },
       yaxis: {
         ...origLayout.yaxis,
-        title: { ...(typeof yAxisTitle === 'string' ? { text: yAxisTitle } : (yAxisTitle || {})), font: { size: 18, color: '#0f172a' } },
-        tickfont: { size: 15, color: '#334155' },
+        title: { ...(typeof yAxisTitle === 'string' ? { text: yAxisTitle } : (yAxisTitle || {})), font: { size: 16, color: '#475569', weight: 700, family: "'Interstate Bold', Arial, sans-serif" }, standoff: 20 },
+        tickfont: { size: 14, color: '#334155', family: "'Interstate', Arial, sans-serif" },
       },
       legend: {
         ...(origLayout.legend || {}),
-        font: { size: 15, color: '#0f172a' },
-        bgcolor: 'rgba(255,255,255,0.6)',
-        bordercolor: '#e2e8f0',
-        borderwidth: 1,
+        y: 1.01, yanchor: 'bottom',
+        font: { size: 14, color: '#0f172a', family: "'Interstate', Arial, sans-serif" },
+        bgcolor: 'rgba(255,255,255,0)',
+        bordercolor: 'rgba(0,0,0,0)',
+        borderwidth: 0,
       },
-      margin: { l: 90, r: 110, t: 90, b: 80 },
+      margin: { l: 100, r: 30, t: 110, b: 90 },
       paper_bgcolor: '#ffffff',
-      plot_bgcolor: '#fafafa',
+      plot_bgcolor: '#ffffff',
     }));
 
     // Render to a hidden off-screen div
@@ -1272,13 +1324,34 @@ async function exportGraphAsImage(divId, filename) {
     document.body.appendChild(exportDiv);
 
     await Plotly.react(exportDiv, traces, exportLayout, { staticPlot: true, displayModeBar: false });
-    // Give Plotly a tick to fully apply layout before snapshotting
     await new Promise(r => setTimeout(r, 50));
 
-    const dataUrl = await Plotly.toImage(exportDiv, {
-      format: 'png',
-      width: exportWidth,
-      height: exportHeight,
+    // Get SVG string, inject base64 fonts, then rasterize via canvas.
+    // Plotly.toImage(png) serializes SVG → canvas without the page's @font-face;
+    // embedding fonts directly in the SVG string is the reliable fix.
+    const fontCSS = await _getExportFontCSS();
+    const svgDataUri = await Plotly.toImage(exportDiv, { format: 'svg', width: exportWidth, height: exportHeight });
+    let svgText = decodeURIComponent(svgDataUri.replace('data:image/svg+xml,', ''));
+    const fontBlock = `<defs><style type="text/css"><![CDATA[${fontCSS}]]></style>`;
+    svgText = svgText.includes('<defs>')
+      ? svgText.replace('<defs>', fontBlock)
+      : svgText.replace(/(<svg[^>]*>)/, `$1${fontBlock}</defs>`);
+
+    const dataUrl = await new Promise((resolve, reject) => {
+      const img = new Image();
+      const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+      const blobUrl = URL.createObjectURL(blob);
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = exportWidth; canvas.height = exportHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, exportWidth, exportHeight);
+        ctx.drawImage(img, 0, 0, exportWidth, exportHeight);
+        URL.revokeObjectURL(blobUrl);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = e => { URL.revokeObjectURL(blobUrl); reject(e); };
+      img.src = blobUrl;
     });
 
     const a = document.createElement('a');

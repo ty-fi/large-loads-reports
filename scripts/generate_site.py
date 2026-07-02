@@ -22,14 +22,14 @@ QUARTER_ORDER = [
 ]
 ALL_STAGES = ["Technical Review", "Request for Service", "Contract for Electric Service"]
 STAGE_COLORS = {
-    "Technical Review": "#5B8DB8",
-    "Request for Service": "#E8963A",
-    "Contract for Electric Service": "#4CAF7D",
+    "Technical Review": "#9bcce3",
+    "Request for Service": "#529cba",
+    "Contract for Electric Service": "#005d7f",
 }
 VINTAGE_COLORS = {
-    "Technical Review":              ["#2E5F8A", "#5B8DB8", "#9BBDD8"],
-    "Request for Service":           ["#C4711A", "#E8963A", "#F4BF87"],
-    "Contract for Electric Service": ["#2A7A55", "#4CAF7D", "#8ED4B0"],
+    "Technical Review":              ["#5da8ca", "#9bcce3", "#c8e4f2"],
+    "Request for Service":           ["#2d6e8a", "#529cba", "#88c0d6"],
+    "Contract for Electric Service": ["#003f58", "#005d7f", "#4091af"],
 }
 VINTAGE_LABELS = ["New (1 qtr)", "2-3 qtrs", "4+ qtrs"]
 VINTAGE_IDX_TO_LABEL = {0: "4+ qtrs", 1: "2-3 qtrs", 2: "New (1 qtr)"}
