@@ -356,7 +356,7 @@
 
 <!-- Tab 1: Snapshot -->
 <div class="tab-content active" id="tab-snapshot">
-  <div class="filter-bar" id="filter-snapshot">
+  <div class="filter-bar">
     <div class="filter-group compact">
       <label>Report Quarter</label>
       <select id="snap-quarter"></select>
@@ -429,7 +429,7 @@
 <!-- Tab 2: Evolution -->
 <div class="tab-content" id="tab-evolution">
   <div class="layout-with-sidebar">
-    <div class="sidebar-panel" id="evo-sidebar">
+    <div class="sidebar-panel">
       <div class="sidebar-section">
         <div class="sidebar-label">Report Quarters</div>
         <div class="toggle-links" style="margin-bottom:6px;">
@@ -501,7 +501,7 @@
 
 <!-- Tab 4: Vintage -->
 <div class="tab-content" id="tab-vintage">
-  <div class="filter-bar" id="filter-vintage">
+  <div class="filter-bar">
     <div class="filter-group compact">
       <label>Report Quarter</label>
       <select id="vint-quarter"></select>
@@ -566,8 +566,6 @@ const META = DATA.meta;
 const D = DATA.long;
 const CHANGES = DATA.changes;
 const TABLE = DATA.table;
-const ADDED = DATA.added;
-const REMOVED = DATA.removed;
 const FORECASTS = DATA.forecasts || [];
 const FORECAST_IDS = FORECASTS.map(f => f.id);
 const QOOQ_EVENTS = DATA.qoq_events || { load_changes: [], stage_transitions: [], schedule_delays: [] };
@@ -590,6 +588,16 @@ const FORECAST_LABELS = META.forecast_labels || {};
 const LOAD_CHANGE_BINS = META.load_change_bins || [];
 const LOAD_CHANGE_STACK_BINS = META.load_change_stack_bins || [];
 const DELAY_BINS = META.delay_bins || [];
+
+// ── Font / layout constants ──────────────────────────────────────────────────
+const FONT_BOLD = "'Interstate Bold', Arial, sans-serif";
+const FONT_REGULAR = "'Interstate', Arial, sans-serif";
+const DEFAULT_LAYOUT = {
+  plot_bgcolor: 'rgba(0,0,0,0)',
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  hovermode: 'x unified',
+  font: { family: FONT_REGULAR },
+};
 
 function vintBucket(age) { return age === 1 ? 2 : age <= 3 ? 1 : 0; }
 
@@ -624,6 +632,14 @@ function getChecked(containerId) {
 
 function setAll(containerId, checked) {
   document.querySelectorAll(`#${containerId} input[type="checkbox"]`).forEach(cb => cb.checked = checked);
+}
+
+function getPeakStats(mwByYear) {
+  const entries = Object.entries(mwByYear).sort((a, b) => b[1] - a[1]);
+  return {
+    year: entries.length ? entries[0][0] : '—',
+    mw: entries.length ? Number(entries[0][1]).toLocaleString() : '—',
+  };
 }
 
 function escHtml(s) {
@@ -736,9 +752,9 @@ function renderSnapshot(opts) {
 
   // Lock y-axis to final quarter's peak for selected stages
   let yaxisOpts = {
-    title: { text: 'Total Pipeline (MW)', font: { size: 13, color: '#475569', weight: 700, family: "'Interstate Bold', Arial, sans-serif" }, standoff: 12 },
+    title: { text: 'Total Pipeline (MW)', font: { size: 13, color: '#475569', weight: 700, family: FONT_BOLD }, standoff: 12 },
     tickformat: ',',
-    tickfont: { size: 12, color: '#334155', family: "'Interstate', Arial, sans-serif" },
+    tickfont: { size: 12, color: '#334155', family: FONT_REGULAR },
     gridcolor: 'rgba(0,0,0,0.07)',
     zeroline: false,
   };
@@ -753,25 +769,24 @@ function renderSnapshot(opts) {
   }
 
   const layout = {
+    ...DEFAULT_LAYOUT,
     barmode: 'stack',
-    font: { family: "'Interstate', Arial, sans-serif" },
     title: {
       text: `Georgia Power Company large load pipeline, by stage (${quarter})`,
       x: 0.5, xanchor: 'center', y: 0.98, yanchor: 'top',
-      font: { size: 14, weight: 700, color: '#0f172a', family: "'Interstate Bold', Arial, sans-serif" }
+      font: { size: 14, weight: 700, color: '#0f172a', family: FONT_BOLD }
     },
     xaxis: {
-      title: { text: 'Planning Year', font: { size: 13, color: '#475569', weight: 700, family: "'Interstate Bold', Arial, sans-serif" } },
+      title: { text: 'Planning Year', font: { size: 13, color: '#475569', weight: 700, family: FONT_BOLD } },
       tickmode: 'linear', dtick: 1,
-      tickfont: { size: 12, color: '#334155', family: "'Interstate', Arial, sans-serif" },
+      tickfont: { size: 12, color: '#334155', family: FONT_REGULAR },
       tickpad: 8,
       showgrid: false,
       showline: true, linecolor: '#e2e8f0',
     },
     yaxis: yaxisOpts,
-    legend: { orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1, font: { family: "'Interstate', Arial, sans-serif", size: 12 } },
-    plot_bgcolor: 'rgba(0,0,0,0)', paper_bgcolor: 'rgba(0,0,0,0)',
-    margin: { l: 70, r: 20, t: 90, b: 60 }, hovermode: 'x unified',
+    legend: { orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1, font: { family: FONT_REGULAR, size: 12 } },
+    margin: { l: 70, r: 20, t: 90, b: 60 },
     height: 480,
   };
 
@@ -779,10 +794,8 @@ function renderSnapshot(opts) {
   const stageFiltered = D.filter(r => r.report_quarter === quarter && stages.includes(r.project_stage) && segments.includes(r.segment));
   const totalMw = {};
   stageFiltered.forEach(r => { totalMw[r.planning_year] = (totalMw[r.planning_year] || 0) + r.load_mw; });
-  const peakEntries = Object.entries(totalMw).sort((a,b) => b[1] - a[1]);
-  const peakYr = peakEntries.length ? peakEntries[0][0] : '&mdash;';
-  const peakMw = peakEntries.length ? Number(peakEntries[0][1]).toLocaleString() : '&mdash;';
-  document.getElementById('snap-subtitle').innerHTML = `${quarter} snapshot &middot; Peak planning year: <strong>${peakYr}</strong> at <strong>${peakMw} MW</strong> total`;
+  const peak = getPeakStats(totalMw);
+  document.getElementById('snap-subtitle').innerHTML = `${quarter} snapshot &middot; Peak planning year: <strong>${peak.year}</strong> at <strong>${peak.mw} MW</strong> total`;
 
   const allTraces = addForecastTraces(traces, 'snap');
 
@@ -922,11 +935,12 @@ function renderEvolution() {
   const stageLabel = stages.length === 3 ? 'all stages' : stages.join(' + ');
   const ylabel = agg === 'sum' ? `Total Pipeline MW (${stageLabel})` : 'Pipeline MW by Stage';
   const layout = {
+    ...DEFAULT_LAYOUT,
     xaxis: { title: 'Planning Year', tickmode: 'linear', dtick: 1 },
     yaxis: { title: ylabel, tickformat: ',' },
     legend: { orientation: 'v', x: 1.01, y: 1, font: { size: 11 } },
-    plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
-    margin: { l: 60, r: 200, t: 20, b: 60 }, hovermode: 'x unified', height: 480,
+    plot_bgcolor: '#fafafa',
+    margin: { l: 60, r: 200, t: 20, b: 60 }, height: 480,
   };
   Plotly.react('evo-chart', traces, layout);
 }
@@ -956,6 +970,7 @@ function renderLoadChangeStacked() {
     hovertemplate: `<b>%{x}</b><br>${b.label}: %{y} changes<extra></extra>`,
   }));
   const layout = {
+    ...DEFAULT_LAYOUT,
     title: {
       text: 'Pipeline load changes by long-term MW magnitude, Q1 2024 – Q1 2026',
       x: 0.5, xanchor: 'center', y: 0.96, yanchor: 'top',
@@ -965,8 +980,8 @@ function renderLoadChangeStacked() {
     xaxis: { title: 'Report Quarter' },
     yaxis: { title: 'Number of load changes', tickformat: ',' },
     legend: { orientation: 'v', x: 1.01, y: 1, font: { size: 10 } },
-    plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
-    margin: { l: 60, r: 200, t: 80, b: 50 }, height: 460, hovermode: 'x unified',
+    plot_bgcolor: '#fafafa',
+    margin: { l: 60, r: 200, t: 80, b: 50 }, height: 460,
   };
   Plotly.react('chg-chart', traces, layout);
 }
@@ -1021,6 +1036,7 @@ function renderDiverging(view) {
   });
 
   const layout = {
+    ...DEFAULT_LAYOUT,
     title: {
       text: `Pipeline projects added and removed (${titleSuffix}), Q1 2024 – Q1 2026`,
       x: 0.5, xanchor: 'center', y: 0.96, yanchor: 'top',
@@ -1030,8 +1046,8 @@ function renderDiverging(view) {
     xaxis: { title: 'Report Quarter' },
     yaxis: { title: view === 'mw' ? 'Long-term MW' : 'Project Count', tickformat: ',', zeroline: true, zerolinecolor: '#888', zerolinewidth: 1 },
     legend: { groupclick: 'toggleitem', orientation: 'v', x: 1.01, y: 1, font: { size: 10 } },
-    plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
-    margin: { l: 60, r: 200, t: 80, b: 50 }, height: 460, hovermode: 'x unified',
+    plot_bgcolor: '#fafafa',
+    margin: { l: 60, r: 200, t: 80, b: 50 }, height: 460,
   };
   Plotly.react('chg-chart', traces, layout);
 }
@@ -1058,6 +1074,7 @@ function renderStageByDirection() {
     hovertemplate: `<b>%{x}</b><br>${dir}: %{y} projects<extra></extra>`,
   }));
   const layout = {
+    ...DEFAULT_LAYOUT,
     title: {
       text: 'Pipeline stage transitions by direction, Q1 2024 – Q1 2026',
       x: 0.5, xanchor: 'center', y: 0.96, yanchor: 'top',
@@ -1067,8 +1084,8 @@ function renderStageByDirection() {
     xaxis: { title: 'Report Quarter' },
     yaxis: { title: 'Number of stage transitions', tickformat: ',' },
     legend: { orientation: 'v', x: 1.01, y: 1, font: { size: 10 } },
-    plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
-    margin: { l: 60, r: 200, t: 80, b: 50 }, height: 460, hovermode: 'x unified',
+    plot_bgcolor: '#fafafa',
+    margin: { l: 60, r: 200, t: 80, b: 50 }, height: 460,
   };
   Plotly.react('chg-chart', traces, layout);
 }
@@ -1088,6 +1105,7 @@ function renderDelayStacked() {
     hovertemplate: `<b>%{x}</b><br>${b.label} months delay: %{y} changes<extra></extra>`,
   }));
   const layout = {
+    ...DEFAULT_LAYOUT,
     title: {
       text: 'Pipeline schedule delay distribution, Q1 2024 – Q1 2026',
       x: 0.5, xanchor: 'center', y: 0.96, yanchor: 'top',
@@ -1097,8 +1115,8 @@ function renderDelayStacked() {
     xaxis: { title: 'Report Quarter' },
     yaxis: { title: 'Number of schedule changes', tickformat: ',' },
     legend: { orientation: 'v', x: 1.01, y: 1, font: { size: 10 } },
-    plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
-    margin: { l: 60, r: 200, t: 80, b: 50 }, height: 460, hovermode: 'x unified',
+    plot_bgcolor: '#fafafa',
+    margin: { l: 60, r: 200, t: 80, b: 50 }, height: 460,
   };
   Plotly.react('chg-chart', traces, layout);
 }
@@ -1218,12 +1236,11 @@ function renderVintage() {
 
   const totalMw = {};
   filtered.forEach(r => { totalMw[r.planning_year] = (totalMw[r.planning_year] || 0) + r.load_mw; });
-  const peakEntries = Object.entries(totalMw).sort((a,b) => b[1] - a[1]);
-  const peakYr = peakEntries.length ? peakEntries[0][0] : '&mdash;';
-  const peakMw = peakEntries.length ? Number(peakEntries[0][1]).toLocaleString() : '&mdash;';
-  document.getElementById('vint-subtitle').innerHTML = `${quarter} snapshot by vintage &middot; Peak: <strong>${peakYr}</strong> at <strong>${peakMw} MW</strong>`;
+  const peak = getPeakStats(totalMw);
+  document.getElementById('vint-subtitle').innerHTML = `${quarter} snapshot by vintage &middot; Peak: <strong>${peak.year}</strong> at <strong>${peak.mw} MW</strong>`;
 
   const layout = {
+    ...DEFAULT_LAYOUT,
     barmode: 'stack',
     title: {
       text: `Georgia Power Company large load pipeline by stage and vintage (${quarter})`,
@@ -1233,8 +1250,8 @@ function renderVintage() {
     xaxis: { title: 'Planning Year', tickmode: 'linear', dtick: 1 },
     yaxis: { title: 'Total Pipeline MW', tickformat: ',' },
     legend: { groupclick: 'toggleitem', orientation: 'v', x: 1.01, y: 1, font: { size: 11 } },
-    plot_bgcolor: '#fafafa', paper_bgcolor: 'rgba(0,0,0,0)',
-    margin: { l: 60, r: 220, t: 70, b: 60 }, hovermode: 'x unified', height: 480,
+    plot_bgcolor: '#fafafa',
+    margin: { l: 60, r: 220, t: 70, b: 60 }, height: 480,
   };
   const allTraces = addForecastTraces(traces, 'vint');
   Plotly.react('vint-chart', allTraces, layout);
@@ -1286,26 +1303,26 @@ async function exportGraphAsImage(divId, filename) {
       width: exportWidth,
       height: exportHeight,
       autosize: false,
-      font: { family: "'Interstate', Arial, sans-serif" },
+      font: { family: FONT_REGULAR },
       title: {
         ...(origLayout.title || {}),
         y: 0.96, yanchor: 'top',
-        font: { size: 20, weight: 700, color: '#0f172a', family: "'Interstate Bold', Arial, sans-serif" }
+        font: { size: 20, weight: 700, color: '#0f172a', family: FONT_BOLD }
       },
       xaxis: {
         ...origLayout.xaxis,
-        title: { ...(typeof axisTitle === 'string' ? { text: axisTitle } : (axisTitle || {})), font: { size: 16, color: '#475569', weight: 700, family: "'Interstate Bold', Arial, sans-serif" } },
-        tickfont: { size: 14, color: '#334155', family: "'Interstate', Arial, sans-serif" },
+        title: { ...(typeof axisTitle === 'string' ? { text: axisTitle } : (axisTitle || {})), font: { size: 16, color: '#475569', weight: 700, family: FONT_BOLD } },
+        tickfont: { size: 14, color: '#334155', family: FONT_REGULAR },
       },
       yaxis: {
         ...origLayout.yaxis,
-        title: { ...(typeof yAxisTitle === 'string' ? { text: yAxisTitle } : (yAxisTitle || {})), font: { size: 16, color: '#475569', weight: 700, family: "'Interstate Bold', Arial, sans-serif" }, standoff: 20 },
-        tickfont: { size: 14, color: '#334155', family: "'Interstate', Arial, sans-serif" },
+        title: { ...(typeof yAxisTitle === 'string' ? { text: yAxisTitle } : (yAxisTitle || {})), font: { size: 16, color: '#475569', weight: 700, family: FONT_BOLD }, standoff: 20 },
+        tickfont: { size: 14, color: '#334155', family: FONT_REGULAR },
       },
       legend: {
         ...(origLayout.legend || {}),
         y: 1.01, yanchor: 'bottom',
-        font: { size: 14, color: '#0f172a', family: "'Interstate', Arial, sans-serif" },
+        font: { size: 14, color: '#0f172a', family: FONT_REGULAR },
         bgcolor: 'rgba(255,255,255,0)',
         bordercolor: 'rgba(0,0,0,0)',
         borderwidth: 0,
@@ -1384,10 +1401,12 @@ function buildTable(containerId, rows, cols) {
   };
 
   const numCols = new Set(['announced_load_mw','project_age','added_projects','added_mw','removed_projects','removed_mw','net_mw','load_change_net_mw','stage_changes_count','avg_delay_months']);
-  const stageCol = 'project_stage';
-  const segCol = 'segment';
-  const terrCol = 'territory';
-  const confCol = 'match_confidence';
+  const CELL_RENDERERS = {
+    project_stage: stageBadge,
+    segment: segmentBadge,
+    territory: territoryBadge,
+    match_confidence: confidenceBadge,
+  };
 
   let html = '<table class="data-table"><thead><tr>';
   cols.forEach(c => {
@@ -1400,14 +1419,9 @@ function buildTable(containerId, rows, cols) {
     cols.forEach(c => {
       const val = r[c];
       const cls = numCols.has(c) ? 'num' : '';
-      if (c === stageCol) {
-        html += `<td>${stageBadge(val)}</td>`;
-      } else if (c === segCol) {
-        html += `<td>${segmentBadge(val)}</td>`;
-      } else if (c === terrCol) {
-        html += `<td>${territoryBadge(val)}</td>`;
-      } else if (c === confCol) {
-        html += `<td>${confidenceBadge(val)}</td>`;
+      const renderer = CELL_RENDERERS[c];
+      if (renderer) {
+        html += `<td>${renderer(val)}</td>`;
       } else if (c === 'announced_load_mw' || c === 'added_mw' || c === 'removed_mw' || c === 'net_mw' || c === 'load_change_net_mw') {
         html += `<td class="${cls}">${fmt(val)}</td>`;
       } else if (c === 'avg_delay_months') {
