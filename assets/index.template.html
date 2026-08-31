@@ -882,15 +882,13 @@ document.getElementById('snap-next').addEventListener('click', () => {
 });
 
 // ── Render: Evolution ────────────────────────────────────────────────────────
-const QUARTER_COLORS = {};
-const TEAL = [0x56, 0xc4, 0xc4]; // #56c4c4
-const NAVY = [0x12, 0x3c, 0x63]; // #123c63
-function lerpColor(a, b, t) {
-  return '#' + [0,1,2].map(i => Math.round(a[i] + (b[i] - a[i]) * t).toString(16).padStart(2,'0')).join('');
-}
-const n = Math.max(QUARTERS.length - 1, 1);
-const PALETTE = QUARTERS.map((_, i) => lerpColor(TEAL, NAVY, i / n));
-QUARTERS.forEach((q,i) => { QUARTER_COLORS[q] = PALETTE[i % PALETTE.length]; });
+// Per-quarter line colors come from quarter_ramp() in generate_site.py, which
+// walks a monotone-lightness / wide-hue ramp in OKLCh so adjacent quarters stay
+// tellable apart. Keyed by quarter, so filtering the chart never repaints the
+// series that remain.
+const QUARTER_COLORS = META.quarter_colors || {};
+const FALLBACK_QUARTER_COLOR = '#64748b';
+function quarterColor(q) { return QUARTER_COLORS[q] || FALLBACK_QUARTER_COLOR; }
 
 function renderEvolution() {
   const quarters = getChecked('evo-quarters');
@@ -920,7 +918,7 @@ function renderEvolution() {
     quartersSorted.forEach(q => {
       const yVals = years.map(y => grouped[q + '|' + y] || 0);
       traces.push({ x: years, y: yVals, mode: 'lines+markers', name: q,
-        line: { color: QUARTER_COLORS[q], width: 2.5 }, marker: { size: 7 },
+        line: { color: quarterColor(q), width: 2.5 }, marker: { size: 7 },
         hovertemplate: `<b>%{x}</b><br>${q}: %{y:,.0f} MW<extra></extra>` });
     });
   } else {
@@ -934,7 +932,7 @@ function renderEvolution() {
         if (yVals.every(v => v === 0)) return;
         traces.push({ x: years, y: yVals, mode: 'lines+markers', name: q,
           legendgroup: stage, legendgrouptitle: { text: stage },
-          line: { color: QUARTER_COLORS[q], width: 1.8, dash: dashes[si % dashes.length] },
+          line: { color: quarterColor(q), width: 1.8, dash: dashes[si % dashes.length] },
           marker: { size: 5 },
           hovertemplate: `<b>%{x}</b><br>${q} ${stage}: %{y:,.0f} MW<extra></extra>` });
       });

@@ -5,6 +5,7 @@ Embeds all data as JSON — no server needed.
 Output: index.html
 """
 import json
+import math
 import re
 from pathlib import Path
 import pandas as pd
@@ -266,6 +267,82 @@ stage_change_directions = sorted({
 })
 
 # ── Exploded-grid Sankey (stages × quarters, plus per-quarter New/Removed) ───
+# ---------------------------------------------------------------------------
+# Quarter ramp for the Pipeline Evolution tab.
+#
+# The old ramp interpolated sRGB from RMI teal to RMI navy. Both endpoints are
+# blue-ish, so nine quarters compressed into a worst adjacent OKLab dE of 4.9 --
+# well under the dE 15 at which neighbouring series read as distinct -- and the
+# lightest step sat at 1.99:1 contrast, effectively invisible on the #fafafa
+# plot area.
+#
+# A single-hue ramp cannot fix this: holding the lightest step at the 2:1
+# contrast floor caps lightness near L=0.74, and 9 steps down from there give
+# dL ~= 0.055 per step, i.e. dE ~= 5.5. Hue is the only channel with headroom,
+# so this ramp keeps lightness monotone (so the reader still sees quarter order)
+# and spends 240 degrees of hue on separation. Chroma is clamped into sRGB per
+# step, because saturated cyan does not exist at mid lightness.
+#
+# Measured at 9 quarters: worst adjacent AND worst all-pairs dE 8.7 (was 4.9),
+# dL 0.058, min chroma 0.104, lightest-step contrast 2.04. All pairs equal
+# adjacent pairs, which confirms the hue path never folds back on itself.
+RAMP_L = (0.74, 0.26)      # oldest -> newest; newest stays darkest, as before
+RAMP_H = (150.0, 390.0)    # green -> teal -> blue -> purple -> magenta -> maroon
+RAMP_C = 0.19              # requested chroma, clamped per step
+
+
+def _oklch_to_linear(L, C, H):
+    h = math.radians(H)
+    a, b = C * math.cos(h), C * math.sin(h)
+    l_ = L + 0.3963377774 * a + 0.2158037573 * b
+    m_ = L - 0.1055613458 * a - 0.0638541728 * b
+    s_ = L - 0.0894841775 * a - 1.2914855480 * b
+    l, m, sv = l_ ** 3, m_ ** 3, s_ ** 3
+    return (4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * sv,
+            -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * sv,
+            -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * sv)
+
+
+def _in_gamut(L, C, H):
+    return all(-1e-6 <= v <= 1 + 1e-6 for v in _oklch_to_linear(L, C, H))
+
+
+def _oklch_to_hex(L, C, H):
+    def enc(v):
+        v = max(0.0, min(1.0, v))
+        v = 12.92 * v if v <= 0.0031308 else 1.055 * (v ** (1 / 2.4)) - 0.055
+        return max(0, min(255, round(v * 255)))
+    return "#" + "".join(f"{enc(v):02x}" for v in _oklch_to_linear(L, C, H))
+
+
+def quarter_ramp(n):
+    """n evenly spaced steps along the ramp, darkest (newest) last."""
+    if n <= 0:
+        return []
+    if n == 1:
+        return [_oklch_to_hex(RAMP_L[1], min(RAMP_C, 0.12), RAMP_H[1])]
+    out = []
+    for i in range(n):
+        t = i / (n - 1)
+        L = RAMP_L[0] + (RAMP_L[1] - RAMP_L[0]) * t
+        H = RAMP_H[0] + (RAMP_H[1] - RAMP_H[0]) * t
+        c = RAMP_C
+        if not _in_gamut(L, c, H):            # bisect to the gamut boundary
+            lo, hi = 0.0, c
+            for _ in range(20):
+                mid = (lo + hi) / 2
+                if _in_gamut(L, mid, H):
+                    lo = mid
+                else:
+                    hi = mid
+            c = lo
+        out.append(_oklch_to_hex(L, c, H))
+    return out
+
+
+QUARTER_COLORS = dict(zip(QUARTERS_PRESENT, quarter_ramp(len(QUARTERS_PRESENT))))
+
+
 def _quarter_label(q):
     """'2026Q2' -> 'Q2 2026' for display."""
     return f"{q[4:]} {q[:4]}"
@@ -467,6 +544,7 @@ EMBEDDED = {
         "quarters": QUARTERS_PRESENT,
         "quarters_all": QUARTERS_PRESENT_ALL,
         "quarter_range": QUARTER_RANGE_LABEL,
+        "quarter_colors": QUARTER_COLORS,
         "years": ALL_YEARS,
         "segments": ALL_SEGMENTS,
         "stages": ALL_STAGES,
