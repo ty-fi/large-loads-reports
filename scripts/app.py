@@ -21,7 +21,13 @@ df_proj = pd.read_csv(COMBINED_DIR / "pipeline_projects.csv")
 df_changes = pd.read_csv(COMBINED_DIR / "pipeline_changes.csv")
 
 QUARTER_ORDER = ["2024Q1","2024Q2","2024Q3","2024Q4",
-                 "2025Q1","2025Q2","2025Q3","2025Q4","2026Q1"]
+                 "2025Q1","2025Q2","2025Q3","2025Q4","2026Q1","2026Q2"]
+
+
+def _quarter_label(q):
+    """'2026Q2' -> 'Q2 2026' for display."""
+    return f"{q[4:]} {q[:4]}"
+
 
 LOAD_COLS = [c for c in df_proj.columns if c.startswith("load_")]
 ID_COLS = ["proj_id", "report_quarter", "quarter_first_seen", "project_age",
@@ -74,6 +80,10 @@ VINTAGE_COLORS = {
 ALL_SEGMENTS = sorted(df_long["segment"].dropna().unique().tolist())
 ALL_YEARS = sorted(int(y) for y in df_long["planning_year"].unique())
 QUARTERS_PRESENT = [q for q in QUARTER_ORDER if q in df_long["report_quarter"].unique().tolist()]
+QUARTER_RANGE_LABEL = (
+    f"{_quarter_label(QUARTERS_PRESENT[0])} – {_quarter_label(QUARTERS_PRESENT[-1])}"
+    if QUARTERS_PRESENT else ""
+)
 
 METRIC_LABELS = {
     "net_mw": "Net MW Added (new projects − removed)",
@@ -196,7 +206,7 @@ app.layout = html.Div([
     html.Div([
         html.H2("Georgia Power Large Load Economic Development Pipeline",
                 style={"margin": "0", "fontWeight": "700", "fontSize": "22px", "color": "#1a1a2e"}),
-        html.P("Docket 55378 · Quarterly Reports Q1 2024 – Q1 2026",
+        html.P(f"Docket 55378 · Quarterly Reports {QUARTER_RANGE_LABEL}",
                style={"margin": "4px 0 0", "color": "#666", "fontSize": "13px"}),
     ], style={"padding": "20px 30px 16px", "borderBottom": "2px solid #e8e8e8",
               "backgroundColor": "#fff"}),

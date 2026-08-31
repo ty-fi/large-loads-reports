@@ -18,6 +18,7 @@ Quarter-to-quarter update logic:
 Output: outputs/combined/pipeline_projects.csv
 """
 
+import datetime
 import re
 from copy import deepcopy
 from pathlib import Path
@@ -27,13 +28,14 @@ import openpyxl
 import pandas as pd
 
 SCRIPT_DIR = Path(__file__).parent
+INPUTS_DIR = SCRIPT_DIR.parent / "inputs"
 OUTPUTS_DIR = SCRIPT_DIR.parent / "outputs"
-WORKBOOKS_DIR = OUTPUTS_DIR / "workbooks"
-CSV_2026Q1_DIR = OUTPUTS_DIR / "2026Q1"
+WORKBOOKS_DIR = INPUTS_DIR / "workbooks"
+CSV_2026Q1_DIR = INPUTS_DIR / "2026Q1"
 COMBINED_DIR = OUTPUTS_DIR / "combined"
 
 QUARTER_ORDER = ["2024Q1", "2024Q2", "2024Q3", "2024Q4",
-                 "2025Q1", "2025Q2", "2025Q3", "2025Q4", "2026Q1"]
+                 "2025Q1", "2025Q2", "2025Q3", "2025Q4", "2026Q1", "2026Q2"]
 
 LOAD_YEARS = list(range(2023, 2038))
 
@@ -55,11 +57,24 @@ SEGMENT_ALIASES = {
 
 # ── Normalization ─────────────────────────────────────────────────────────────
 
+KNOWN_STAGES = set(STAGE_ALIASES.values())
+
+_warned_stages = set()
+
+
 def norm_stage(raw):
     if not raw:
         return ""
     cleaned = re.sub(r'[\s\d*]+$', '', str(raw)).strip()
-    return STAGE_ALIASES.get(cleaned.lower(), cleaned)
+    stage = STAGE_ALIASES.get(cleaned.lower(), cleaned)
+    if stage and stage not in KNOWN_STAGES:
+        # Footnote text can land in the Project Stage column (first seen in the
+        # Q2 2026 filing). Reject it, but say so rather than dropping silently.
+        if stage not in _warned_stages:
+            _warned_stages.add(stage)
+            print(f"    WARNING: ignoring unrecognized Project Stage value: {stage[:70]!r}")
+        return ""
+    return stage
 
 def norm_segment(s):
     if not s:
@@ -73,10 +88,26 @@ def norm_load(v):
         return None
 
 def norm_date(s):
+    """Normalize an in-service date to a 'Q<n> YYYY' label.
+
+    Quarters through Q1 2026 wrote these as text ('Q4 2027'). The Q2 2026
+    workbook switched to real Excel datetimes (2027-12-01), which the old
+    regex passed through verbatim -- so no fingerprint ever matched across
+    that boundary. Accept both forms.
+    """
     if not s:
         return ""
-    m = re.search(r'Q([1-4])\s*(\d{4})', str(s), re.IGNORECASE)
-    return f"Q{m.group(1)} {m.group(2)}" if m else str(s).strip()
+    if isinstance(s, (datetime.datetime, datetime.date)):
+        return f"Q{(s.month - 1) // 3 + 1} {s.year}"
+    text = str(s).strip()
+    m = re.search(r'Q([1-4])\s*(\d{4})', text, re.IGNORECASE)
+    if m:
+        return f"Q{m.group(1)} {m.group(2)}"
+    m = re.match(r'(\d{4})-(\d{2})-(\d{2})', text)
+    if m:
+        year, month = int(m.group(1)), int(m.group(2))
+        return f"Q{(month - 1) // 3 + 1} {year}"
+    return text
 
 def norm_flag(v):
     return "Y" if str(v).strip().upper() == "Y" else ""
@@ -92,6 +123,18 @@ def find_header_row(rows):
         if any(c and re.search(r'project.?(name|stage)', str(c), re.IGNORECASE) for c in row):
             return i
     return None
+
+def name_base(headers):
+    """Index of the 'Project Name' column in a change sheet.
+
+    Change-sheet columns used to be read positionally from column 0. The Q2 2026
+    workbook inserted a leading blank column, which shifted every field right by
+    one and made all change metrics parse as empty. Anchoring on Project Name
+    keeps both layouts working.
+    """
+    idx = find_col(headers, r'project.?name')
+    return idx if idx is not None else 0
+
 
 def find_col(headers, *patterns):
     for pat in patterns:
@@ -187,12 +230,13 @@ def parse_excel_load_changes(ws):
     hi = find_header_row(rows)
     if hi is None:
         return []
+    base = name_base(rows[hi])
     result = []
     for row in rows[hi + 1:]:
-        if row[0] is None:
+        if base + 2 >= len(row) or row[base] is None:
             continue
-        new_load  = norm_load(row[1])
-        prev_load = norm_load(row[2])
+        new_load  = norm_load(row[base + 1])
+        prev_load = norm_load(row[base + 2])
         if prev_load is not None and new_load is not None and prev_load != new_load:
             result.append((prev_load, new_load))
     return result
@@ -203,12 +247,13 @@ def parse_excel_date_changes(ws):
     hi = find_header_row(rows)
     if hi is None:
         return []
+    base = name_base(rows[hi])
     result = []
     for row in rows[hi + 1:]:
-        if row[0] is None:
+        if base + 2 >= len(row) or row[base] is None:
             continue
-        new_date  = norm_date(row[1])
-        prev_date = norm_date(row[2])
+        new_date  = norm_date(row[base + 1])
+        prev_date = norm_date(row[base + 2])
         if prev_date and new_date and prev_date != new_date:
             result.append((prev_date, new_date))
     return result
@@ -247,9 +292,10 @@ def parse_excel_ramp_changes(ws):
     if not year_new or not year_prev:
         return []
 
+    base = name_base(rows[hi])
     result = []
     for row in rows[hi + 1:]:
-        if not row or row[0] is None:
+        if not row or base >= len(row) or row[base] is None:
             continue
         new_ramp  = {yr: float(row[ci]) if row[ci] is not None else 0.0
                      for ci, yr in year_new.items()}
@@ -266,12 +312,14 @@ def parse_excel_removed(ws):
     hi = find_header_row(rows)
     if hi is None:
         return []
+    base = name_base(rows[hi])
     result = []
     for row in rows[hi + 1:]:
-        if row[0] is None:
+        if base + 1 >= len(row) or row[base] is None:
             continue
-        load   = norm_load(row[1])
-        reason = str(row[2]).strip() if len(row) > 2 and row[2] else ""
+        load   = norm_load(row[base + 1])
+        reason = (str(row[base + 2]).strip()
+                  if len(row) > base + 2 and row[base + 2] else "")
         if load is not None:
             result.append((load, reason))
     return result

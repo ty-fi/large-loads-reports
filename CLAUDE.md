@@ -4,7 +4,7 @@ This document orients future agents to how the component parts of this repo work
 
 ## What this repo is
 
-A web dashboard for **Georgia Power's Large Load Economic Development Pipeline** (Docket 55378, Q1 2024 – Q1 2026), built by RMI. Two delivery formats exist; the static one is the actively-maintained presentation surface, the Dash app is a secondary live-server version.
+A web dashboard for **Georgia Power's Large Load Economic Development Pipeline** (Docket 55378, Q1 2024 – Q2 2026), built by RMI. Two delivery formats exist; the static one is the actively-maintained presentation surface, the Dash app is a secondary live-server version.
 
 ## The two output formats
 
@@ -24,8 +24,8 @@ large-loads-reports/
 │   ├── index.template.html   # Source-of-truth for static dashboard
 │   └── rmi_logo_horitzontal_no_tagline.svg
 ├── inputs/
-│   ├── workbooks/<quarter>/  # Raw Excel reports (Q1 2024 – Q4 2025)
-│   ├── 2026Q1/               # Manual CSVs for Q1 2026 (no Excel available)
+│   ├── workbooks/<quarter>/  # Raw Excel reports (Q1 2024 – Q4 2025, Q2 2026)
+│   ├── 2026Q1/               # Manual CSVs for Q1 2026 (no Excel was filed)
 │   │   ├── pipeline_main.csv
 │   │   ├── new_projects.csv
 │   │   ├── pipeline_exits.csv
@@ -155,12 +155,30 @@ EMBEDDED = {
 5. Test in browser
 
 ### Update with new quarterly data
-1. Drop the new Excel into `inputs/workbooks/<newQuarter>/` (or add manual CSVs to `inputs/<newQuarter>/`)
-2. Add the new quarter to `QUARTER_ORDER` in `build_dataset.py` (line ~28) and in `assign_project_ids.py` (similar constant)
-3. Run `python scripts/build_dataset.py` (rebuilds snapshot + changes CSVs)
-4. Run `python scripts/assign_project_ids.py` (assigns persistent IDs)
-5. Run `python scripts/generate_site.py` (regenerates index.html)
-6. Commit and push (Render auto-deploys if used)
+Filings live at `https://psc.ga.gov/search/facts-document/?documentId=<docId>`
+under Docket 55378; the attachment is a ZIP containing the Excel workbook.
+
+1. Drop the new Excel into `inputs/workbooks/<newQuarter>/` (or add manual CSVs
+   to `inputs/<newQuarter>/` if the quarter was filed without one, as Q1 2026 was)
+2. Add the new quarter to `QUARTER_ORDER` in **all four** of `build_dataset.py`,
+   `assign_project_ids.py`, `generate_site.py`, and `app.py`
+3. Run `.venv\Scripts\python.exe scripts/build_dataset.py`
+4. Run `.venv\Scripts\python.exe scripts/assign_project_ids.py`
+5. Run `.venv\Scripts\python.exe scripts/generate_site.py`
+6. Commit and push — GitHub Pages builds from `main:/` and serves
+   https://ty-fi.github.io/large-loads-reports/
+
+**Validate before committing** — the filing format drifts between quarters
+(see gotcha 10), and the failures are silent:
+- the per-quarter table from `build_dataset.py` should show only the three real
+  stages, and no `WARNING: ignoring unrecognized Project Stage value`
+  you haven't already accounted for
+- the new row in `pipeline_changes.csv` should not be all zeros
+- the match summary from `assign_project_ids.py` should show `Exact` matches
+  roughly in line with prior quarters; near-zero means a fingerprint field
+  (segment / territory / announced load / in-service date) changed format
+- `generate_site.py` is deterministic: running it twice must produce an
+  identical `index.html`
 
 ### Edit the static dashboard
 **Never edit `index.html` directly** — it's regenerated. Edit `assets/index.template.html`, then run `python scripts/generate_site.py`.
@@ -193,8 +211,9 @@ EMBEDDED = {
 - Contract for Electric Service: `#2A7A55` → `#4CAF7D` → `#8ED4B0`
 
 ### Python environment
-- A `.venv` at the repo root has Python 3.13 + pandas. Use `.venv\Scripts\python.exe scripts/generate_site.py` to regenerate.
-- Created with `uv venv .venv --python 3.13 && uv pip install pandas --python .venv\Scripts\python.exe`
+- A `.venv` at the repo root has Python 3.13 + pandas + openpyxl. Use `.venv\Scripts\python.exe scripts/generate_site.py` to regenerate.
+- Created with `uv venv .venv --python 3.13 && uv pip install pandas openpyxl --python .venv\Scripts\python.exe`
+- `openpyxl` is required by `build_dataset.py` and `assign_project_ids.py` to read the quarterly workbooks.
 - Default `python` on PATH is 3.12 (no pandas) — always use the venv.
 
 ## Gotchas (things that aren't obvious)
@@ -207,7 +226,7 @@ EMBEDDED = {
 
 4. **The `Pipeline Evolution` y-axis title is dynamic** — it changes between `Total Pipeline MW (all stages)` and `Pipeline MW by Stage` depending on the aggregation mode radio button.
 
-5. **The quarter animation y-axis is locked** to the final quarter's (2026Q1) peak for the *selected* stages, not the global max. This prevents unchecked stages from inflating the y-axis range.
+5. **The quarter animation y-axis is locked** to the final quarter's peak for the *selected* stages, not the global max. This prevents unchecked stages from inflating the y-axis range.
 
 6. **Project IDs are persistent across quarters** but the matching algorithm is heuristic. The `match_confidence` column tells you how confident the match is — when iterating on data, check this column for quality.
 
@@ -217,7 +236,37 @@ EMBEDDED = {
 
 9. **The `Pipeline Snapshot` and `Snapshot by Vintage` charts have an `Export this graph` button** that renders to a hidden off-screen div with larger fonts and a narrower 900px width, optimized for blog/website integration. See `exportGraphAsImage()` in `index.template.html` (search for it).
 
-10. **Forecast line colors** are defined in `generate_site.py` (`_fc_desired` dict at line ~113). They are not in `meta`, so changing them requires editing the script.
+10. **Filing formats drift between quarters, and the parsers now absorb it.**
+    The Q2 2026 workbook changed four things at once, each of which silently
+    corrupted the build before it was handled:
+    - a trailing **footnote row** whose text landed in the Project Stage column
+      (became a phantom stage) → `valid_stage()` / `norm_stage()` reject any
+      value that is not a known stage, and warn rather than drop silently;
+    - a **leading blank column** on every change sheet, which shifted the
+      positional `row[0]/[1]/[2]` reads and zeroed out every change metric
+      → parsers now anchor on the Project Name column (`name_col_index()`,
+      `name_base()`);
+    - **in-service dates as real Excel datetimes** (`2027-12-01`) instead of
+      `Q4 2027` text, which broke every cross-quarter fingerprint match
+      (0 exact matches) → `norm_date()` accepts datetimes and ISO dates;
+    - a **negated sign** on the `Change (Months)` column → the delay metric is
+      now derived from the two date columns instead of that column, so a
+      future sign flip cannot invert it.
+    When adding a quarter, check the per-quarter match summary from
+    `assign_project_ids.py`: a quarter with near-zero `Exact` matches means a
+    fingerprint field changed format.
+
+11. **Chart date ranges and the default quarter are derived, not hardcoded.**
+    `meta.quarter_range` (from `QUARTER_RANGE_LABEL` in `generate_site.py`)
+    feeds all chart titles and the header; the Snapshot/Vintage quarter selects
+    default to `LATEST_QUARTER`. Do not reintroduce literal quarter strings.
+
+12. **The Sankey grid build is order-stable.** `_grid_links` is emitted via
+    `sorted(_grid_flows.items())` because the upstream set iteration made the
+    link order vary between runs, producing a spurious `index.html` diff on
+    every regeneration.
+
+13. **Forecast line colors** are defined in `generate_site.py` (`_fc_desired` dict at line ~113). They are not in `meta`, so changing them requires editing the script.
 
 ## Things to NOT do
 
@@ -228,7 +277,7 @@ EMBEDDED = {
 
 ## See also
 
-- `_SESSION-CONTEXT.md` — Current session state, at-a-glance, next steps
-- `_QOQ-REDESIGN-CHECKLIST.md` — In-progress redesign of the QoQ tab
-- `_RENDER-DEPLOY-PLAN.md` — Plan to deploy the Dash app to Render
 - `README.md` — Public-facing overview
+
+Underscore-prefixed `_*.md` session files are gitignored and none currently
+exist in this repo; create them only if a session actually needs one.

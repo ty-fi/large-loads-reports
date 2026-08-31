@@ -4,6 +4,7 @@ into two combined datasets:
   - pipeline_snapshot.csv : total MW by (report_quarter, project_stage, planning_year)
   - pipeline_changes.csv  : per-quarter change metrics (additions, removals, etc.)
 """
+import datetime
 import re
 import sys
 from pathlib import Path
@@ -26,7 +27,12 @@ STAGE_ALIASES = {
 }
 
 QUARTER_ORDER = ["2024Q1","2024Q2","2024Q3","2024Q4",
-                 "2025Q1","2025Q2","2025Q3","2025Q4","2026Q1"]
+                 "2025Q1","2025Q2","2025Q3","2025Q4","2026Q1","2026Q2"]
+
+
+KNOWN_STAGES = set(STAGE_ALIASES.values())
+
+_warned_stages: set[str] = set()
 
 
 def normalize_stage(raw: str) -> str:
@@ -34,6 +40,27 @@ def normalize_stage(raw: str) -> str:
         return ""
     cleaned = re.sub(r'[\s\d*]+$', '', str(raw)).strip()
     return STAGE_ALIASES.get(cleaned.lower(), cleaned)
+
+
+def valid_stage(raw, quarter: str = "") -> str:
+    """Normalize a stage, rejecting values that are not real stages.
+
+    Q2 2026 introduced a trailing footnote row whose text lands in the Project
+    Stage column; without this guard it becomes a phantom pipeline stage.
+    Anything rejected is warned about once so a genuine new stage name is not
+    dropped silently.
+    """
+    stage = normalize_stage(raw)
+    if not stage:
+        return ""
+    if stage not in KNOWN_STAGES:
+        key = f"{quarter}|{stage}"
+        if key not in _warned_stages:
+            _warned_stages.add(key)
+            print(f"    WARNING: ignoring unrecognized Project Stage value "
+                  f"in {quarter or '?'}: {stage[:70]!r}")
+        return ""
+    return stage
 
 
 def load_sheet_rows(ws) -> list[tuple]:
@@ -62,6 +89,17 @@ def get_year_cols(headers: tuple) -> dict[int, int]:
             if 2020 <= yr <= 2040:
                 result[i] = yr
     return result
+
+
+def name_col_index(headers: list) -> int:
+    """Column index of 'Project Name'.
+
+    The Q2 2026 workbook inserted a leading blank column, so the old
+    ``row[0] is not None`` data-row test silently skipped every row. Anchor on
+    the Project Name column instead; fall back to 0 if it is absent.
+    """
+    idx = col_index(headers, "project name")
+    return idx if idx is not None else 0
 
 
 def col_index(headers: list, *names: str) -> int | None:
@@ -97,7 +135,7 @@ def parse_main_sheet(ws, quarter: str) -> list[dict]:
         raw_stage = row[stage_col]
         if raw_stage is None:
             continue
-        stage = normalize_stage(raw_stage)
+        stage = valid_stage(raw_stage, quarter)
         if not stage:
             continue
         for ci, year in year_cols.items():
@@ -125,11 +163,12 @@ def parse_removed_projects(ws) -> tuple[int, float]:
     mw_col = col_index(headers, "announced load")
     if mw_col is None:
         return 0, 0.0
+    name_col = name_col_index(headers)
     count, total = 0, 0.0
     for row in rows[hrow + 1:]:
         if not any(c is not None for c in row):
             continue
-        if row[0] is None:
+        if name_col >= len(row) or row[name_col] is None:
             continue
         try:
             total += float(row[mw_col]) if row[mw_col] is not None else 0.0
@@ -149,11 +188,12 @@ def parse_projects_added(ws) -> tuple[int, float]:
     mw_col = col_index(headers, "announced load")
     if mw_col is None:
         return 0, 0.0
+    name_col = name_col_index(headers)
     count, total = 0, 0.0
     for row in rows[hrow + 1:]:
         if not any(c is not None for c in row):
             continue
-        if row[0] is None:
+        if name_col >= len(row) or row[name_col] is None:
             continue
         try:
             total += float(row[mw_col]) if row[mw_col] is not None else 0.0
@@ -173,11 +213,12 @@ def parse_load_change(ws) -> float:
     change_col = col_index(headers, "change")
     if change_col is None:
         return 0.0
+    name_col = name_col_index(headers)
     total = 0.0
     for row in rows[hrow + 1:]:
         if not any(c is not None for c in row):
             continue
-        if row[0] is None:
+        if name_col >= len(row) or row[name_col] is None:
             continue
         try:
             total += float(row[change_col]) if row[change_col] is not None else 0.0
@@ -186,28 +227,58 @@ def parse_load_change(ws) -> float:
     return total
 
 
+def quarter_to_months(val) -> int | None:
+    """Convert a service-date label to an absolute month index.
+
+    Accepts both the 'Q<n> YYYY' text used through Q1 2026 and the real
+    datetimes the Q2 2026 workbook switched to.
+    """
+    if val is None:
+        return None
+    if isinstance(val, (datetime.datetime, datetime.date)):
+        return val.year * 12 + ((val.month - 1) // 3) * 3
+    text = str(val).strip()
+    m = re.match(r'\s*Q(\d)\s+(\d{4})', text)
+    if m:
+        return int(m.group(2)) * 12 + (int(m.group(1)) - 1) * 3
+    m = re.match(r'(\d{4})-(\d{2})-(\d{2})', text)
+    if m:
+        return int(m.group(1)) * 12 + ((int(m.group(2)) - 1) // 3) * 3
+    return None
+
+
 def parse_service_date_change(ws) -> float:
-    """Return average delay in months from Initial Service Change sheet."""
+    """Return average schedule delay in months from Initial Service Change sheet.
+
+    Derived from the two date columns (current minus previous, so positive means
+    the in-service date slipped later) rather than the sheet's own
+    'Change (Months)' column. Georgia Power negated that column's sign in the
+    Q2 2026 filing, so reading it directly would report delays as accelerations.
+    The stated column is used only when a row's dates cannot be parsed.
+    """
     rows = load_sheet_rows(ws)
     hrow = find_header_idx(rows)
     if hrow is None:
         return 0.0
     headers = rows[hrow]
     change_col = col_index(headers, "change (months)", "change")
-    if change_col is None:
-        return 0.0
+    name_col = name_col_index(headers)
     vals = []
     for row in rows[hrow + 1:]:
         if not any(c is not None for c in row):
             continue
-        if row[0] is None:
+        if name_col >= len(row) or row[name_col] is None:
             continue
-        try:
-            v = float(row[change_col]) if row[change_col] is not None else None
-            if v is not None:
-                vals.append(v)
-        except (TypeError, ValueError):
-            pass
+        curr = quarter_to_months(row[name_col + 1]) if name_col + 1 < len(row) else None
+        prev = quarter_to_months(row[name_col + 2]) if name_col + 2 < len(row) else None
+        if curr is not None and prev is not None:
+            vals.append(curr - prev)
+            continue
+        if change_col is not None and change_col < len(row) and row[change_col] is not None:
+            try:
+                vals.append(float(row[change_col]))
+            except (TypeError, ValueError):
+                pass
     return sum(vals) / len(vals) if vals else 0.0
 
 
@@ -217,9 +288,10 @@ def parse_stage_change(ws) -> int:
     hrow = find_header_idx(rows)
     if hrow is None:
         return 0
+    name_col = name_col_index(rows[hrow])
     count = 0
     for row in rows[hrow + 1:]:
-        if row[0] is not None and any(c is not None for c in row):
+        if name_col < len(row) and row[name_col] is not None and any(c is not None for c in row):
             count += 1
     return count
 

@@ -5,7 +5,8 @@ __pycache__/
 
 # Large raw downloads
 inputs/workbooks/raw/
-inputs/workbooks/*/   # extracted Excel files
+# Quarterly workbooks under inputs/workbooks/<quarter>/ ARE tracked --
+# they are the reproducible source for outputs/combined/.
 
 # OS
 Thumbs.db

@@ -18,7 +18,7 @@ ROOT_TEMPLATE = ROOT_TEMPLATE_FILE.read_text(encoding="utf-8") if ROOT_TEMPLATE_
 
 QUARTER_ORDER = [
     "2024Q1", "2024Q2", "2024Q3", "2024Q4",
-    "2025Q1", "2025Q2", "2025Q3", "2025Q4", "2026Q1",
+    "2025Q1", "2025Q2", "2025Q3", "2025Q4", "2026Q1", "2026Q2",
 ]
 ALL_STAGES = ["Technical Review", "Request for Service", "Contract for Electric Service"]
 STAGE_COLORS = {
@@ -266,7 +266,21 @@ stage_change_directions = sorted({
 })
 
 # ── Exploded-grid Sankey (stages × quarters, plus per-quarter New/Removed) ───
-_QUARTERS_EXP = QUARTERS_PRESENT_ALL  # 9 quarters including 2024Q1
+def _quarter_label(q):
+    """'2026Q2' -> 'Q2 2026' for display."""
+    return f"{q[4:]} {q[:4]}"
+
+
+# Chart titles used to hardcode this range, so every new quarter needed a manual
+# template edit. Derive it instead.
+QUARTER_RANGE_LABEL = (
+    f"{_quarter_label(QUARTERS_PRESENT_ALL[0])} – {_quarter_label(QUARTERS_PRESENT_ALL[-1])}"
+    if QUARTERS_PRESENT_ALL else ""
+)
+
+_QUARTERS_EXP = QUARTERS_PRESENT_ALL  # all quarters, including the 2024Q1 seed
+_FIRST_Q = _QUARTERS_EXP[0]
+_LAST_Q = _QUARTERS_EXP[-1]
 _STAGE_ORDER = ALL_STAGES
 _ROW_Y = {
     "New": 0.0,
@@ -313,23 +327,23 @@ for _i, _q in enumerate(_QUARTERS_EXP):
     for _stage in _STAGE_ORDER:
         _add_node(_stage_key(_stage, _q), _stage, _x, _ROW_Y[_stage], STAGE_COLORS[_stage])
 
-# Balance 2024Q1 column: each (Stage, 2024Q1) needs inflow from a hidden _source
-# equal to the count of projects in that stage (so outflow = inflow).
+# Balance the seed column: each (Stage, first quarter) needs inflow from a hidden
+# _source equal to the count of projects in that stage (so outflow = inflow).
 _q1_stage_counts = (
-    df_proj[df_proj["report_quarter"] == "2024Q1"]["project_stage"]
+    df_proj[df_proj["report_quarter"] == _FIRST_Q]["project_stage"]
     .value_counts()
     .to_dict()
 )
-_q1_removed_count = int(df_changes[df_changes["report_quarter"] == "2024Q1"]["removed_projects"].fillna(0).sum())
+_q1_removed_count = int(df_changes[df_changes["report_quarter"] == _FIRST_Q]["removed_projects"].fillna(0).sum())
 if any(_q1_stage_counts.get(_s, 0) > 0 for _s in _STAGE_ORDER) or _q1_removed_count > 0:
     _add_node("_source", "", -0.04, 0.5, _HIDDEN_COLOR)
     for _stage in _STAGE_ORDER:
         _cnt = int(_q1_stage_counts.get(_stage, 0))
         if _cnt > 0:
-            _tgt = _stage_key(_stage, "2024Q1")
+            _tgt = _stage_key(_stage, _FIRST_Q)
             _grid_flows[("_source", _tgt)] = _grid_flows.get(("_source", _tgt), 0) + _cnt
     if _q1_removed_count > 0:
-        _tgt = _stage_key("Removed", "2024Q1")
+        _tgt = _stage_key("Removed", _FIRST_Q)
         _grid_flows[("_source", _tgt)] = _grid_flows.get(("_source", _tgt), 0) + _q1_removed_count
 
 # For each consecutive pair (Q-1, Q): stays, transitions, new entries, removals
@@ -366,26 +380,26 @@ for _i in range(1, len(_QUARTERS_EXP)):
         _tgt = _stage_key("Removed", _curr_q)
         _grid_flows[(_src, _tgt)] = _grid_flows.get((_src, _tgt), 0) + 1
 
-# Balance 2026Q1 column: each (Stage, 2026Q1) needs outflow to _still_in_pipeline
-# equal to its total inflow.
+# Balance the final column: each (Stage, last quarter) needs outflow to
+# _still_in_pipeline equal to its total inflow.
 _q_last_in = {stage: 0 for stage in _STAGE_ORDER}
 for (_src, _tgt), _cnt in _grid_flows.items():
     for _stage in _STAGE_ORDER:
-        if _tgt == _stage_key(_stage, "2026Q1"):
+        if _tgt == _stage_key(_stage, _LAST_Q):
             _q_last_in[_stage] += _cnt
             break
 if any(_v > 0 for _v in _q_last_in.values()):
     _add_node("_still_in_pipeline", "", 1.04, 0.5, _HIDDEN_COLOR)
     for _stage in _STAGE_ORDER:
         if _q_last_in[_stage] > 0:
-            _src = _stage_key(_stage, "2026Q1")
+            _src = _stage_key(_stage, _LAST_Q)
             _grid_flows[(_src, "_still_in_pipeline")] = (
                 _grid_flows.get((_src, "_still_in_pipeline"), 0) + _q_last_in[_stage]
             )
 
 # Convert flows to list, marking hidden ones (involving _source or _still_in_pipeline)
 _grid_links = []
-for (_src, _tgt), _cnt in _grid_flows.items():
+for (_src, _tgt), _cnt in sorted(_grid_flows.items()):
     if _cnt <= 0:
         continue
     _grid_links.append({
@@ -452,6 +466,7 @@ EMBEDDED = {
     "meta": {
         "quarters": QUARTERS_PRESENT,
         "quarters_all": QUARTERS_PRESENT_ALL,
+        "quarter_range": QUARTER_RANGE_LABEL,
         "years": ALL_YEARS,
         "segments": ALL_SEGMENTS,
         "stages": ALL_STAGES,

@@ -329,7 +329,7 @@
     <img src="assets/rmi_logo_horitzontal_no_tagline.svg" alt="RMI">
     <div>
       <h1>Large Load Economic Development Pipeline</h1>
-      <p>Docket 55378 &middot; Quarterly Reports Q1 2024 &ndash; Q1 2026</p>
+      <p>Docket 55378 &middot; Quarterly Reports <span id="hdr-quarter-range"></span></p>
     </div>
   </div>
   <div class="header-actions">
@@ -340,7 +340,7 @@
 <div id="info-panel">
   <strong>Data Source:</strong> Georgia Power Company Large Load Economic Development Reports,
   filed quarterly with the Georgia Public Service Commission under Docket No. 55378.
-  Data spans Q1 2024 through Q1 2026. Pipeline stages represent projects at
+  Data spans <span id="about-quarter-range"></span>. Pipeline stages represent projects at
   <strong>Technical Review</strong>, <strong>Request for Service</strong>, and
   <strong>Contract for Electric Service</strong>. MW figures reflect each project&#39;s
   announced load as reported each quarter.
@@ -566,6 +566,8 @@ const META = DATA.meta;
 const D = DATA.long;
 const CHANGES = DATA.changes;
 const TABLE = DATA.table;
+const QUARTER_RANGE = META.quarter_range || '';
+const LATEST_QUARTER = (META.quarters || []).slice(-1)[0] || '';
 const FORECASTS = DATA.forecasts || [];
 const FORECAST_IDS = FORECASTS.map(f => f.id);
 const QOOQ_EVENTS = DATA.qoq_events || { load_changes: [], stage_transitions: [], schedule_delays: [] };
@@ -598,6 +600,11 @@ const DEFAULT_LAYOUT = {
   hovermode: 'x unified',
   font: { family: FONT_REGULAR },
 };
+
+['hdr-quarter-range', 'about-quarter-range'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.textContent = QUARTER_RANGE;
+});
 
 function vintBucket(age) { return age === 1 ? 2 : age <= 3 ? 1 : 0; }
 
@@ -638,7 +645,9 @@ function getPeakStats(mwByYear) {
   const entries = Object.entries(mwByYear).sort((a, b) => b[1] - a[1]);
   return {
     year: entries.length ? entries[0][0] : '—',
-    mw: entries.length ? Number(entries[0][1]).toLocaleString() : '—',
+    // Ramp cells carry fractional MW from Q2 2026 onward; the headline peak
+    // reads as a whole-MW figure.
+    mw: entries.length ? Math.round(Number(entries[0][1])).toLocaleString() : '—',
   };
 }
 
@@ -649,7 +658,7 @@ function escHtml(s) {
 
 function fmt(n) {
   if (n == null || isNaN(n)) return '&mdash;';
-  return Number(n).toLocaleString();
+  return Number(n).toLocaleString(undefined, { maximumFractionDigits: 1 });
 }
 
 // ── Badge rendering ──────────────────────────────────────────────────────────
@@ -972,7 +981,7 @@ function renderLoadChangeStacked() {
   const layout = {
     ...DEFAULT_LAYOUT,
     title: {
-      text: 'Pipeline load changes by long-term MW magnitude, Q1 2024 – Q1 2026',
+      text: `Pipeline load changes by long-term MW magnitude, ${QUARTER_RANGE}`,
       x: 0.5, xanchor: 'center', y: 0.96, yanchor: 'top',
       font: { size: 20, weight: 700, color: '#0f172a', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif' }
     },
@@ -1038,7 +1047,7 @@ function renderDiverging(view) {
   const layout = {
     ...DEFAULT_LAYOUT,
     title: {
-      text: `Pipeline projects added and removed (${titleSuffix}), Q1 2024 – Q1 2026`,
+      text: `Pipeline projects added and removed (${titleSuffix}), ${QUARTER_RANGE}`,
       x: 0.5, xanchor: 'center', y: 0.96, yanchor: 'top',
       font: { size: 20, weight: 700, color: '#0f172a', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif' }
     },
@@ -1076,7 +1085,7 @@ function renderStageByDirection() {
   const layout = {
     ...DEFAULT_LAYOUT,
     title: {
-      text: 'Pipeline stage transitions by direction, Q1 2024 – Q1 2026',
+      text: `Pipeline stage transitions by direction, ${QUARTER_RANGE}`,
       x: 0.5, xanchor: 'center', y: 0.96, yanchor: 'top',
       font: { size: 20, weight: 700, color: '#0f172a', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif' }
     },
@@ -1107,7 +1116,7 @@ function renderDelayStacked() {
   const layout = {
     ...DEFAULT_LAYOUT,
     title: {
-      text: 'Pipeline schedule delay distribution, Q1 2024 – Q1 2026',
+      text: `Pipeline schedule delay distribution, ${QUARTER_RANGE}`,
       x: 0.5, xanchor: 'center', y: 0.96, yanchor: 'top',
       font: { size: 20, weight: 700, color: '#0f172a', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif' }
     },
@@ -1183,7 +1192,7 @@ function renderSankey() {
   }];
   const layout = {
     title: {
-      text: 'Pipeline stage flow by quarter, Q1 2024 \u2013 Q1 2026',
+      text: `Pipeline stage flow by quarter, ${QUARTER_RANGE}`,
       x: 0.5, xanchor: 'center', y: 0.97, yanchor: 'top',
       font: { size: 20, weight: 700, color: '#0f172a', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif' }
     },
@@ -1468,7 +1477,7 @@ function buildTable(containerId, rows, cols) {
 // ── Init controls ────────────────────────────────────────────────────────────
 // Snapshot — filters auto-pause animation
 function snapFilterChange() { stopAnimation(); renderSnapshot(); }
-buildSelect('snap-quarter', QUARTERS, snapFilterChange, '2026Q1');
+buildSelect('snap-quarter', QUARTERS, snapFilterChange, LATEST_QUARTER);
 buildCheckboxes('snap-stages', STAGES, STAGES, snapFilterChange);
 buildCheckboxes('snap-segments', SEGMENTS, SEGMENTS, snapFilterChange);
 document.getElementById('snap-seg-all').addEventListener('click', () => { setAll('snap-segments', true); snapFilterChange(); });
@@ -1515,7 +1524,7 @@ const chgCols = ['report_quarter','added_projects','added_mw','removed_projects'
 buildTable('chg-table-wrap', CHANGES, chgCols);
 
 // Vintage
-buildSelect('vint-quarter', QUARTERS, renderVintage, '2026Q1');
+buildSelect('vint-quarter', QUARTERS, renderVintage, LATEST_QUARTER);
 buildCheckboxes('vint-stages', STAGES, STAGES, renderVintage);
 document.getElementById('vint-stage-all').addEventListener('click', () => { setAll('vint-stages', true); renderVintage(); });
 document.getElementById('vint-stage-none').addEventListener('click', () => { setAll('vint-stages', false); renderVintage(); });
