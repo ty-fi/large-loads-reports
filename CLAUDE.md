@@ -4,7 +4,7 @@ This document orients future agents to how the component parts of this repo work
 
 ## What this repo is
 
-A web dashboard for **Georgia Power's Large Load Economic Development Pipeline** (Docket 55378, Q1 2024 – Q2 2026), built by RMI. Two delivery formats exist; the static one is the actively-maintained presentation surface, the Dash app is a secondary live-server version.
+A web dashboard for **Georgia Power's Large Load Economic Development Pipeline** (Docket 55378, Q1 2024 – Q3 2026), built by RMI. Two delivery formats exist; the static one is the actively-maintained presentation surface, the Dash app is a secondary live-server version.
 
 ## The two output formats
 
@@ -24,27 +24,18 @@ large-loads-reports/
 │   ├── index.template.html   # Source-of-truth for static dashboard
 │   └── rmi_logo_horitzontal_no_tagline.svg
 ├── inputs/
-│   ├── workbooks/<quarter>/  # Raw Excel reports (Q1 2024 – Q4 2025, Q2 2026)
-│   ├── 2026Q1/               # Manual CSVs for Q1 2026 (no Excel was filed)
-│   │   ├── pipeline_main.csv
-│   │   ├── new_projects.csv
-│   │   ├── pipeline_exits.csv
-│   │   ├── load_changes.csv        # per-project load deltas with Change_MW
-│   │   ├── stage_changes.csv       # per-project stage transitions
-│   │   ├── service_date_changes.csv # per-project date deltas with Change_Months
-│   │   └── load_ramp_comparison.csv
+│   ├── workbooks/<quarter>/  # Georgia Power's Excel attachment, one per quarter (Q1 2024 – Q3 2026)
 │   └── GPC_Load_Forecasts.csv       # IRP forecast reference series
 ├── outputs/combined/         # Normalized CSVs (generated, do NOT edit)
-│   ├── pipeline_projects.csv       # 888 rows: per-project, per-quarter + load_2023..load_2037
-│   ├── pipeline_changes.csv        # 9 rows: per-quarter aggregate change metrics
+│   ├── pipeline_projects.csv       # 1,131 rows: per-project, per-quarter + load_2023..load_2037
+│   ├── pipeline_changes.csv        # 11 rows: per-quarter aggregate change metrics
 │   └── pipeline_snapshot.csv       # Aggregated by (quarter, stage, year)
 ├── scripts/
 │   ├── scrape_workbooks.py    # Downloads quarterly Excel files from PSC site
-│   ├── build_dataset.py       # Parses Excel + Q1 2026 CSVs → combined CSVs
+│   ├── build_dataset.py       # Parses Excel workbooks → combined CSVs
 │   ├── assign_project_ids.py  # Matches projects across quarters → persistent proj_id
 │   ├── generate_site.py       # Reads combined CSVs → embeds JSON in template → index.html
-│   ├── app.py                 # Plotly Dash app (live server, same 4-tab layout)
-│   └── spot_check.py / spot_check2.py  # Validation
+│   └── app.py                 # Plotly Dash app (live server, same 4-tab layout)
 ├── README.md                  # Public readme
 └── _*.md                      # Underscore-prefixed: Claude-managed session/task files
     ├── _SESSION-CONTEXT.md
@@ -60,8 +51,8 @@ Raw inputs              Build pipeline                Combined outputs         T
 ─────────────           ───────────────               ────────────────         ─────────────────
 inputs/workbooks/   ┐
   <quarter>/*.xlsx  ├──→  build_dataset.py     ┌──→  pipeline_projects.csv
-inputs/2026Q1/      │     (parse sheets,       ├──→  pipeline_changes.csv
-  *.csv             ┘      normalize, join)    └──→  pipeline_snapshot.csv
+                    │     (parse sheets,       ├──→  pipeline_changes.csv
+                    ┘      normalize, join)    └──→  pipeline_snapshot.csv
                                               │
                                               ▼
                               assign_project_ids.py
@@ -86,15 +77,17 @@ inputs/2026Q1/      │     (parse sheets,       ├──→  pipeline_changes.
 
 ### `scripts/build_dataset.py`
 - Parses Excel workbooks in `inputs/workbooks/<quarter>/` (one .xlsx per quarter)
-- Parses Q1 2026 manual CSVs from `inputs/2026Q1/`
 - Produces two outputs:
   - `pipeline_snapshot.csv`: long-format (quarter × stage × planning_year) → total MW
   - `pipeline_changes.csv`: per-quarter aggregate metrics (added/removed count + MW, load change net MW, stage changes count, avg delay months)
 - Stage normalization via `STAGE_ALIASES` dict
 
 ### `scripts/assign_project_ids.py`
-- Matches projects across quarters (fingerprint matching with multiple passes)
-- Confidence values: `seed`, `exact`, `exact_noseg`, `ramp_0.XX`, `identity`, `identity_0.XX`, `new`
+- Matches projects across quarters with one min-cost assignment per quarter
+  (`scipy.optimize.linear_sum_assignment`), driven by each filing's own
+  New Project? / change flags and its change sheets — see gotcha 16
+- Confidence values: `seed`, `new`, `exact` (every attribute reconciles with the
+  filing), `high` (minor disagreement), `low` (a substantive attribute disagrees)
 - Output: `pipeline_projects.csv` (with `proj_id` column)
 
 ### `scripts/generate_site.py` (most-edited script)
@@ -156,10 +149,20 @@ EMBEDDED = {
 
 ### Update with new quarterly data
 Filings live at `https://psc.ga.gov/search/facts-document/?documentId=<docId>`
-under Docket 55378; the attachment is a ZIP containing the Excel workbook.
+under Docket 55378. The Excel workbook is usually inside a single ZIP attachment,
+but some filings attach it directly beside the PDF and Word files (Q1 2026 did);
+`scrape_workbooks.py` handles both. A filing's attachments can also change after
+the filing date: the Q1 2026 workbook was once believed missing and hand-
+transcribed from the PDF, and that transcription had 63 wrong cells.
+The docket page renders its document list with JavaScript, so find new docIds
+from the JSON endpoint it calls (newest first):
+`https://psc.ga.gov/search/service-facts-docket/?docketId=55378&sortDirection=desc&sortColumn=documentId&searchText=&pageSize=15&pageNumber=1`.
+Add the docId to `FILINGS` in `scrape_workbooks.py`.
 
-1. Drop the new Excel into `inputs/workbooks/<newQuarter>/` (or add manual CSVs
-   to `inputs/<newQuarter>/` if the quarter was filed without one, as Q1 2026 was)
+1. Run `scrape_workbooks.py`, or drop the new Excel into
+   `inputs/workbooks/<newQuarter>/`. If a filing seems to have no workbook,
+   check every attachment and re-check later before transcribing anything
+   by hand
 2. Add the new quarter to `QUARTER_ORDER` in **all four** of `build_dataset.py`,
    `assign_project_ids.py`, `generate_site.py`, and `app.py`
 3. Run `.venv\Scripts\python.exe scripts/build_dataset.py`
@@ -174,9 +177,11 @@ under Docket 55378; the attachment is a ZIP containing the Excel workbook.
   stages, and no `WARNING: ignoring unrecognized Project Stage value`
   you haven't already accounted for
 - the new row in `pipeline_changes.csv` should not be all zeros
-- the match summary from `assign_project_ids.py` should show `Exact` matches
-  roughly in line with prior quarters; near-zero means a fingerprint field
-  (segment / territory / announced load / in-service date) changed format
+- the match summary from `assign_project_ids.py` should show `Exact` for most
+  continuing projects, `New` equal to the New Project? flag count, `Removed`
+  equal to the Removed Projects row count, and `Vanish` at 0. A `NOTE: filing
+  does not reconcile` line, many `Low` matches, or nonzero `Vanish` means a
+  field changed format or the filing has a bookkeeping error worth reading
 - `generate_site.py` is deterministic: running it twice must produce an
   identical `index.html`
 
@@ -218,8 +223,10 @@ Chroma is requested at 0.19 and clamped into sRGB per step.
 - Contract for Electric Service: `#2A7A55` → `#4CAF7D` → `#8ED4B0`
 
 ### Python environment
-- A `.venv` at the repo root has Python 3.13 + pandas + openpyxl. Use `.venv\Scripts\python.exe scripts/generate_site.py` to regenerate.
-- Created with `uv venv .venv --python 3.13 && uv pip install pandas openpyxl --python .venv\Scripts\python.exe`
+- A `.venv` at the repo root has Python 3.13 + pandas + openpyxl + scipy. Use `.venv\Scripts\python.exe scripts/generate_site.py` to regenerate.
+- Created with `uv venv .venv --python 3.13 && uv pip install pandas openpyxl scipy requests --python .venv\Scripts\python.exe`
+- `requests` is needed only by `scrape_workbooks.py`.
+- `scipy` is required by `assign_project_ids.py` (`linear_sum_assignment`).
 - `openpyxl` is required by `build_dataset.py` and `assign_project_ids.py` to read the quarterly workbooks.
 - Default `python` on PATH is 3.12 (no pandas) — always use the venv.
 
@@ -235,7 +242,7 @@ Chroma is requested at 0.19 and clamped into sRGB per step.
 
 5. **The quarter animation y-axis is locked** to the final quarter's peak for the *selected* stages, not the global max. This prevents unchecked stages from inflating the y-axis range.
 
-6. **Project IDs are persistent across quarters** but the matching algorithm is heuristic. The `match_confidence` column tells you how confident the match is — when iterating on data, check this column for quality.
+6. **Project IDs are persistent across quarters** but inferred (names are redacted; see gotcha 16). The `match_confidence` column tells you how confident the match is — when iterating on data, check this column for quality.
 
 7. **`added` and `removed` arrays in `EMBEDDED` use the *current* quarter for the timestamp** even for removed projects (they're attributed to the quarter they disappeared from, not the quarter they were first seen).
 
@@ -260,8 +267,8 @@ Chroma is requested at 0.19 and clamped into sRGB per step.
       now derived from the two date columns instead of that column, so a
       future sign flip cannot invert it.
     When adding a quarter, check the per-quarter match summary from
-    `assign_project_ids.py`: a quarter with near-zero `Exact` matches means a
-    fingerprint field changed format.
+    `assign_project_ids.py`: a quarter with few `Exact` matches means a
+    matched field changed format.
 
 11. **Chart date ranges and the default quarter are derived, not hardcoded.**
     `meta.quarter_range` (from `QUARTER_RANGE_LABEL` in `generate_site.py`)
@@ -286,6 +293,35 @@ Chroma is requested at 0.19 and clamped into sRGB per step.
     Verify with the dataviz skill's validator rather than by eye.
 
 14. **Forecast line colors** are defined in `generate_site.py` (`_fc_desired` dict at line ~113). They are not in `meta`, so changing them requires editing the script.
+
+15. **Change sheets put totals and footnotes in the Project Name column.**
+    `Total` rows (carrying the column sum), `Note 1 - ...` rows, and footnotes
+    (`*Announced load as of 2037`, `1. Absent customer ...`) all sit in the
+    name column. Before Q3 2026 they were counted as projects, so added/removed
+    counts ran 1–2 high in most quarters and added/removed/net-load MW doubled
+    in 2025Q2, 2025Q3, 2025Q4 and 2026Q2. `is_project_row()` in both
+    `build_dataset.py` and `assign_project_ids.py` now rejects them; extend its
+    regex if a new kind of non-project row appears.
+
+16. **`proj_id` matching is an assignment problem, not fingerprinting.** Names
+    are redacted, but each filing's bookkeeping reconciles exactly:
+    `prev − Removed Projects + (New Project? = Y) == current` in every quarter
+    except two, both off by one on the same 216 MW Request for Service
+    project: 2026Q1's Main sheet forgets to flag it new (Projects Added lists
+    it), and 2026Q3 flags it new again (absent from Projects Added; it is an
+    unflagged one-year date slip). Each
+    current row also flags which of load / ramp / stage / date changed, and the
+    change sheets give the prior values. `match_quarter()` turns that into a
+    cost matrix (weights are the `W_*` / `COST_*` constants) and solves it.
+    Validate by comparing the changes the matches imply against the change
+    sheets' row counts; across 2024Q2–2026Q3 they are 86 / 253 / 26 implied
+    load / date / stage changes against 75 / 247 / 23 listed. The previous
+    multi-pass fingerprint + ramp-similarity matcher implied 281 / 289 / 71
+    and attached about half of each quarter's new projects to old IDs.
+    Known filing quirks it absorbs: 2025Q3 (revised filing) changed ~40 ramps
+    and ~10 loads without setting the flags, and flags one unchanged 146 MW
+    project as new; 2024Q4, 2025Q4 and 2026Q3 each carry a few unflagged
+    in-service date rewrites.
 
 ## Things to NOT do
 

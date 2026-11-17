@@ -21,7 +21,7 @@ df_proj = pd.read_csv(COMBINED_DIR / "pipeline_projects.csv")
 df_changes = pd.read_csv(COMBINED_DIR / "pipeline_changes.csv")
 
 QUARTER_ORDER = ["2024Q1","2024Q2","2024Q3","2024Q4",
-                 "2025Q1","2025Q2","2025Q3","2025Q4","2026Q1","2026Q2"]
+                 "2025Q1","2025Q2","2025Q3","2025Q4","2026Q1","2026Q2","2026Q3"]
 
 
 def _quarter_label(q):
