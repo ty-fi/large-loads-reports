@@ -93,8 +93,11 @@ inputs/2026Q1/      │     (parse sheets,       ├──→  pipeline_changes.
 - Stage normalization via `STAGE_ALIASES` dict
 
 ### `scripts/assign_project_ids.py`
-- Matches projects across quarters (fingerprint matching with multiple passes)
-- Confidence values: `seed`, `exact`, `exact_noseg`, `ramp_0.XX`, `identity`, `identity_0.XX`, `new`
+- Matches projects across quarters with one min-cost assignment per quarter
+  (`scipy.optimize.linear_sum_assignment`), driven by each filing's own
+  New Project? / change flags and its change sheets — see gotcha 16
+- Confidence values: `seed`, `new`, `exact` (every attribute reconciles with the
+  filing), `high` (minor disagreement), `low` (a substantive attribute disagrees)
 - Output: `pipeline_projects.csv` (with `proj_id` column)
 
 ### `scripts/generate_site.py` (most-edited script)
@@ -178,9 +181,11 @@ Add the docId to `FILINGS` in `scrape_workbooks.py`.
   stages, and no `WARNING: ignoring unrecognized Project Stage value`
   you haven't already accounted for
 - the new row in `pipeline_changes.csv` should not be all zeros
-- the match summary from `assign_project_ids.py` should show `Exact` matches
-  roughly in line with prior quarters; near-zero means a fingerprint field
-  (segment / territory / announced load / in-service date) changed format
+- the match summary from `assign_project_ids.py` should show `Exact` for most
+  continuing projects, `New` equal to the New Project? flag count, `Removed`
+  equal to the Removed Projects row count, and `Vanish` at 0. A `NOTE: filing
+  does not reconcile` line, many `Low` matches, or nonzero `Vanish` means a
+  field changed format or the filing has a bookkeeping error worth reading
 - `generate_site.py` is deterministic: running it twice must produce an
   identical `index.html`
 
@@ -222,8 +227,9 @@ Chroma is requested at 0.19 and clamped into sRGB per step.
 - Contract for Electric Service: `#2A7A55` → `#4CAF7D` → `#8ED4B0`
 
 ### Python environment
-- A `.venv` at the repo root has Python 3.13 + pandas + openpyxl. Use `.venv\Scripts\python.exe scripts/generate_site.py` to regenerate.
-- Created with `uv venv .venv --python 3.13 && uv pip install pandas openpyxl --python .venv\Scripts\python.exe`
+- A `.venv` at the repo root has Python 3.13 + pandas + openpyxl + scipy. Use `.venv\Scripts\python.exe scripts/generate_site.py` to regenerate.
+- Created with `uv venv .venv --python 3.13 && uv pip install pandas openpyxl scipy --python .venv\Scripts\python.exe`
+- `scipy` is required by `assign_project_ids.py` (`linear_sum_assignment`).
 - `openpyxl` is required by `build_dataset.py` and `assign_project_ids.py` to read the quarterly workbooks.
 - Default `python` on PATH is 3.12 (no pandas) — always use the venv.
 
@@ -239,7 +245,7 @@ Chroma is requested at 0.19 and clamped into sRGB per step.
 
 5. **The quarter animation y-axis is locked** to the final quarter's peak for the *selected* stages, not the global max. This prevents unchecked stages from inflating the y-axis range.
 
-6. **Project IDs are persistent across quarters** but the matching algorithm is heuristic. The `match_confidence` column tells you how confident the match is — when iterating on data, check this column for quality.
+6. **Project IDs are persistent across quarters** but inferred (names are redacted; see gotcha 16). The `match_confidence` column tells you how confident the match is — when iterating on data, check this column for quality.
 
 7. **`added` and `removed` arrays in `EMBEDDED` use the *current* quarter for the timestamp** even for removed projects (they're attributed to the quarter they disappeared from, not the quarter they were first seen).
 
@@ -264,8 +270,8 @@ Chroma is requested at 0.19 and clamped into sRGB per step.
       now derived from the two date columns instead of that column, so a
       future sign flip cannot invert it.
     When adding a quarter, check the per-quarter match summary from
-    `assign_project_ids.py`: a quarter with near-zero `Exact` matches means a
-    fingerprint field changed format.
+    `assign_project_ids.py`: a quarter with few `Exact` matches means a
+    matched field changed format.
 
 11. **Chart date ranges and the default quarter are derived, not hardcoded.**
     `meta.quarter_range` (from `QUARTER_RANGE_LABEL` in `generate_site.py`)
@@ -300,12 +306,24 @@ Chroma is requested at 0.19 and clamped into sRGB per step.
     `build_dataset.py` and `assign_project_ids.py` now rejects them; extend its
     regex if a new kind of non-project row appears.
 
-16. **`proj_id` matching under-detects new projects.** Compare
-    `match_confidence == 'new'` against Georgia Power's own `new_project == 'Y'`
-    flag: about half the flagged projects each quarter are ramp-matched onto an
-    older ID, with a similar number of unflagged projects labeled new instead.
-    Also, `parse_excel_ramp_changes()` finds 0 ramp changes from 2024Q3 on,
-    because the prior-quarter block's year headers are strings, not ints.
+16. **`proj_id` matching is an assignment problem, not fingerprinting.** Names
+    are redacted, but each filing's bookkeeping reconciles exactly:
+    `prev − Removed Projects + (New Project? = Y) == current` in every quarter
+    except 2026Q3 (a 216 MW project is flagged new but absent from Projects
+    Added; it is the same project with an unflagged one-year date slip). Each
+    current row also flags which of load / ramp / stage / date changed, and the
+    change sheets give the prior values. `match_quarter()` turns that into a
+    cost matrix (weights are the `W_*` / `COST_*` constants) and solves it.
+    Validate by comparing the changes the matches imply against the change
+    sheets' row counts; across 2024Q2–2026Q3 they are 87 / 253 / 27 implied
+    load / date / stage changes against 75 / 247 / 23 listed. The previous
+    multi-pass fingerprint + ramp-similarity matcher implied 281 / 289 / 71
+    and attached about half of each quarter's new projects to old IDs.
+    Known filing quirks it absorbs: 2025Q3 (revised filing) changed ~40 ramps
+    and ~10 loads without setting the flags, and flags one unchanged 146 MW
+    project as new; the hand-transcribed 2026Q1 CSV flips Inside/Outside
+    territory on six projects that flip back in 2026Q2 (likely transcription
+    errors worth checking against the Q1 2026 PDF).
 
 ## Things to NOT do
 
