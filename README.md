@@ -1,6 +1,6 @@
 # Georgia Power Large Load Economic Development Pipeline Dashboard
 
-Interactive web dashboard for Georgia Power's large load pipeline data, sourced from quarterly reports filed under Docket 55378 (Q1 2024 – Q2 2026). Built by RMI.
+Interactive web dashboard for Georgia Power's large load pipeline data, sourced from quarterly reports filed under Docket 55378 (Q1 2024 – Q3 2026). Built by RMI.
 
 ## Key Features
 

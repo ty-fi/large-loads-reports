@@ -19,7 +19,7 @@ ROOT_TEMPLATE = ROOT_TEMPLATE_FILE.read_text(encoding="utf-8") if ROOT_TEMPLATE_
 
 QUARTER_ORDER = [
     "2024Q1", "2024Q2", "2024Q3", "2024Q4",
-    "2025Q1", "2025Q2", "2025Q3", "2025Q4", "2026Q1", "2026Q2",
+    "2025Q1", "2025Q2", "2025Q3", "2025Q4", "2026Q1", "2026Q2", "2026Q3",
 ]
 ALL_STAGES = ["Technical Review", "Request for Service", "Contract for Electric Service"]
 STAGE_COLORS = {

@@ -1,6 +1,6 @@
 """
 Download Large Load Economic Development Report Excel workbooks from GA PSC Docket 55378.
-Outputs Excel files organized by quarter into outputs/workbooks/{quarter}/.
+Outputs Excel files organized by quarter into inputs/workbooks/{quarter}/.
 """
 import re
 import time
@@ -9,7 +9,7 @@ import io
 from pathlib import Path
 import requests
 
-# Hardcoded filing manifest (verified 2026-05-16)
+# Hardcoded filing manifest (verified 2026-11-17)
 # docId 225690 (Q3+Q4 2025 Revised) supersedes 224615 and 225384
 FILINGS = [
     ("2024Q1", 218694),
@@ -20,11 +20,14 @@ FILINGS = [
     ("2025Q2", 223705),
     # Q3 and Q4 2025 both come from the revised filing (one ZIP, two Excels)
     ("2025Q3+Q4", 225690),
+    # 2026Q1 (226607) was filed without an Excel workbook -- see inputs/2026Q1/
+    ("2026Q2", 227753),
+    ("2026Q3", 229481),
 ]
 
 BASE_URL = "https://psc.ga.gov/search/facts-document/?documentId={}"
 SCRIPT_DIR = Path(__file__).parent
-OUTPUTS_DIR = SCRIPT_DIR.parent / "outputs"
+OUTPUTS_DIR = SCRIPT_DIR.parent / "inputs"  # workbooks are inputs since the repo reorg
 RAW_DIR = OUTPUTS_DIR / "workbooks" / "raw"
 WORKBOOKS_DIR = OUTPUTS_DIR / "workbooks"
 

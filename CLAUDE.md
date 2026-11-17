@@ -4,7 +4,7 @@ This document orients future agents to how the component parts of this repo work
 
 ## What this repo is
 
-A web dashboard for **Georgia Power's Large Load Economic Development Pipeline** (Docket 55378, Q1 2024 – Q2 2026), built by RMI. Two delivery formats exist; the static one is the actively-maintained presentation surface, the Dash app is a secondary live-server version.
+A web dashboard for **Georgia Power's Large Load Economic Development Pipeline** (Docket 55378, Q1 2024 – Q3 2026), built by RMI. Two delivery formats exist; the static one is the actively-maintained presentation surface, the Dash app is a secondary live-server version.
 
 ## The two output formats
 
@@ -24,7 +24,7 @@ large-loads-reports/
 │   ├── index.template.html   # Source-of-truth for static dashboard
 │   └── rmi_logo_horitzontal_no_tagline.svg
 ├── inputs/
-│   ├── workbooks/<quarter>/  # Raw Excel reports (Q1 2024 – Q4 2025, Q2 2026)
+│   ├── workbooks/<quarter>/  # Raw Excel reports (Q1 2024 – Q4 2025, Q2 2026 – Q3 2026)
 │   ├── 2026Q1/               # Manual CSVs for Q1 2026 (no Excel was filed)
 │   │   ├── pipeline_main.csv
 │   │   ├── new_projects.csv
@@ -35,8 +35,8 @@ large-loads-reports/
 │   │   └── load_ramp_comparison.csv
 │   └── GPC_Load_Forecasts.csv       # IRP forecast reference series
 ├── outputs/combined/         # Normalized CSVs (generated, do NOT edit)
-│   ├── pipeline_projects.csv       # 888 rows: per-project, per-quarter + load_2023..load_2037
-│   ├── pipeline_changes.csv        # 9 rows: per-quarter aggregate change metrics
+│   ├── pipeline_projects.csv       # 1,131 rows: per-project, per-quarter + load_2023..load_2037
+│   ├── pipeline_changes.csv        # 11 rows: per-quarter aggregate change metrics
 │   └── pipeline_snapshot.csv       # Aggregated by (quarter, stage, year)
 ├── scripts/
 │   ├── scrape_workbooks.py    # Downloads quarterly Excel files from PSC site
@@ -157,6 +157,10 @@ EMBEDDED = {
 ### Update with new quarterly data
 Filings live at `https://psc.ga.gov/search/facts-document/?documentId=<docId>`
 under Docket 55378; the attachment is a ZIP containing the Excel workbook.
+The docket page renders its document list with JavaScript, so find new docIds
+from the JSON endpoint it calls (newest first):
+`https://psc.ga.gov/search/service-facts-docket/?docketId=55378&sortDirection=desc&sortColumn=documentId&searchText=&pageSize=15&pageNumber=1`.
+Add the docId to `FILINGS` in `scrape_workbooks.py`.
 
 1. Drop the new Excel into `inputs/workbooks/<newQuarter>/` (or add manual CSVs
    to `inputs/<newQuarter>/` if the quarter was filed without one, as Q1 2026 was)
@@ -286,6 +290,22 @@ Chroma is requested at 0.19 and clamped into sRGB per step.
     Verify with the dataviz skill's validator rather than by eye.
 
 14. **Forecast line colors** are defined in `generate_site.py` (`_fc_desired` dict at line ~113). They are not in `meta`, so changing them requires editing the script.
+
+15. **Change sheets put totals and footnotes in the Project Name column.**
+    `Total` rows (carrying the column sum), `Note 1 - ...` rows, and footnotes
+    (`*Announced load as of 2037`, `1. Absent customer ...`) all sit in the
+    name column. Before Q3 2026 they were counted as projects, so added/removed
+    counts ran 1–2 high in most quarters and added/removed/net-load MW doubled
+    in 2025Q2, 2025Q3, 2025Q4 and 2026Q2. `is_project_row()` in both
+    `build_dataset.py` and `assign_project_ids.py` now rejects them; extend its
+    regex if a new kind of non-project row appears.
+
+16. **`proj_id` matching under-detects new projects.** Compare
+    `match_confidence == 'new'` against Georgia Power's own `new_project == 'Y'`
+    flag: about half the flagged projects each quarter are ramp-matched onto an
+    older ID, with a similar number of unflagged projects labeled new instead.
+    Also, `parse_excel_ramp_changes()` finds 0 ramp changes from 2024Q3 on,
+    because the prior-quarter block's year headers are strings, not ints.
 
 ## Things to NOT do
 

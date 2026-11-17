@@ -35,7 +35,7 @@ CSV_2026Q1_DIR = INPUTS_DIR / "2026Q1"
 COMBINED_DIR = OUTPUTS_DIR / "combined"
 
 QUARTER_ORDER = ["2024Q1", "2024Q2", "2024Q3", "2024Q4",
-                 "2025Q1", "2025Q2", "2025Q3", "2025Q4", "2026Q1", "2026Q2"]
+                 "2025Q1", "2025Q2", "2025Q3", "2025Q4", "2026Q1", "2026Q2", "2026Q3"]
 
 LOAD_YEARS = list(range(2023, 2038))
 
@@ -136,6 +136,20 @@ def name_base(headers):
     return idx if idx is not None else 0
 
 
+_NON_PROJECT_NAME = re.compile(r'^(total\b|note\b|\*|\d+\.\s)', re.IGNORECASE)
+
+
+def is_project_row(row, base):
+    """False for change-sheet 'Total' rows and footnotes in the name column.
+
+    A 'Total' row on Removed Projects parses as a removal whose load equals the
+    sheet sum, which can pop an unrelated project out of the matching pool.
+    """
+    if not row or base >= len(row) or row[base] is None:
+        return False
+    return not _NON_PROJECT_NAME.match(str(row[base]).strip())
+
+
 def find_col(headers, *patterns):
     for pat in patterns:
         for i, h in enumerate(headers):
@@ -233,7 +247,7 @@ def parse_excel_load_changes(ws):
     base = name_base(rows[hi])
     result = []
     for row in rows[hi + 1:]:
-        if base + 2 >= len(row) or row[base] is None:
+        if base + 2 >= len(row) or not is_project_row(row, base):
             continue
         new_load  = norm_load(row[base + 1])
         prev_load = norm_load(row[base + 2])
@@ -250,7 +264,7 @@ def parse_excel_date_changes(ws):
     base = name_base(rows[hi])
     result = []
     for row in rows[hi + 1:]:
-        if base + 2 >= len(row) or row[base] is None:
+        if base + 2 >= len(row) or not is_project_row(row, base):
             continue
         new_date  = norm_date(row[base + 1])
         prev_date = norm_date(row[base + 2])
@@ -295,7 +309,7 @@ def parse_excel_ramp_changes(ws):
     base = name_base(rows[hi])
     result = []
     for row in rows[hi + 1:]:
-        if not row or base >= len(row) or row[base] is None:
+        if not is_project_row(row, base):
             continue
         new_ramp  = {yr: float(row[ci]) if row[ci] is not None else 0.0
                      for ci, yr in year_new.items()}
@@ -315,7 +329,7 @@ def parse_excel_removed(ws):
     base = name_base(rows[hi])
     result = []
     for row in rows[hi + 1:]:
-        if base + 1 >= len(row) or row[base] is None:
+        if base + 1 >= len(row) or not is_project_row(row, base):
             continue
         load   = norm_load(row[base + 1])
         reason = (str(row[base + 2]).strip()

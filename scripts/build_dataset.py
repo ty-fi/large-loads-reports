@@ -27,7 +27,7 @@ STAGE_ALIASES = {
 }
 
 QUARTER_ORDER = ["2024Q1","2024Q2","2024Q3","2024Q4",
-                 "2025Q1","2025Q2","2025Q3","2025Q4","2026Q1","2026Q2"]
+                 "2025Q1","2025Q2","2025Q3","2025Q4","2026Q1","2026Q2","2026Q3"]
 
 
 KNOWN_STAGES = set(STAGE_ALIASES.values())
@@ -102,6 +102,22 @@ def name_col_index(headers: list) -> int:
     return idx if idx is not None else 0
 
 
+_NON_PROJECT_NAME = re.compile(r'^(total\b|note\b|\*|\d+\.\s)', re.IGNORECASE)
+
+
+def is_project_row(row: tuple, name_col: int) -> bool:
+    """True if this change-sheet row is a project, not a total or footnote.
+
+    The Project Name column also carries 'Total' rows (with the sheet sum in
+    the MW/Change column, which doubled every total when counted), 'Note 1 - ...'
+    rows, and footnotes ('*Announced load as of 2037', '1. Absent customer
+    ...'). Every quarter has at least one; reject them all.
+    """
+    if name_col >= len(row) or row[name_col] is None:
+        return False
+    return not _NON_PROJECT_NAME.match(str(row[name_col]).strip())
+
+
 def col_index(headers: list, *names: str) -> int | None:
     """Find first matching column (case-insensitive, partial match allowed)."""
     for name in names:
@@ -168,7 +184,7 @@ def parse_removed_projects(ws) -> tuple[int, float]:
     for row in rows[hrow + 1:]:
         if not any(c is not None for c in row):
             continue
-        if name_col >= len(row) or row[name_col] is None:
+        if not is_project_row(row, name_col):
             continue
         try:
             total += float(row[mw_col]) if row[mw_col] is not None else 0.0
@@ -193,7 +209,7 @@ def parse_projects_added(ws) -> tuple[int, float]:
     for row in rows[hrow + 1:]:
         if not any(c is not None for c in row):
             continue
-        if name_col >= len(row) or row[name_col] is None:
+        if not is_project_row(row, name_col):
             continue
         try:
             total += float(row[mw_col]) if row[mw_col] is not None else 0.0
@@ -218,7 +234,7 @@ def parse_load_change(ws) -> float:
     for row in rows[hrow + 1:]:
         if not any(c is not None for c in row):
             continue
-        if name_col >= len(row) or row[name_col] is None:
+        if not is_project_row(row, name_col):
             continue
         try:
             total += float(row[change_col]) if row[change_col] is not None else 0.0
@@ -267,7 +283,7 @@ def parse_service_date_change(ws) -> float:
     for row in rows[hrow + 1:]:
         if not any(c is not None for c in row):
             continue
-        if name_col >= len(row) or row[name_col] is None:
+        if not is_project_row(row, name_col):
             continue
         curr = quarter_to_months(row[name_col + 1]) if name_col + 1 < len(row) else None
         prev = quarter_to_months(row[name_col + 2]) if name_col + 2 < len(row) else None
@@ -291,7 +307,7 @@ def parse_stage_change(ws) -> int:
     name_col = name_col_index(rows[hrow])
     count = 0
     for row in rows[hrow + 1:]:
-        if name_col < len(row) and row[name_col] is not None and any(c is not None for c in row):
+        if is_project_row(row, name_col):
             count += 1
     return count
 
