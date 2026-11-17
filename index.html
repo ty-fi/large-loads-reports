@@ -404,10 +404,14 @@
 
   <div class="chart-subtitle" id="snap-subtitle"></div>
   <div class="card">
-    <div style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:8px;">
+    <div style="display:flex; justify-content:flex-end; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
       <button class="export-btn" id="snap-export" title="Download this chart as a PNG image">
         <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 11l-4-4h2.5V2h3v5H12L8 11zm-6 3v-2h12v2H2z"/></svg>
         Export this graph
+      </button>
+      <button class="export-btn" id="snap-export-gif" title="Download the quarter-by-quarter animation as a GIF, using the current filters">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 11l-4-4h2.5V2h3v5H12L8 11zm-6 3v-2h12v2H2z"/></svg>
+        <span class="btn-label">Export animation (GIF)</span>
       </button>
     </div>
     <div id="snap-chart"></div>
@@ -476,7 +480,21 @@
       </div>
     </div>
     <div class="chart-main">
-      <div class="card"><div id="evo-chart"></div></div>
+      <div class="card">
+        <div style="display:flex; justify-content:flex-end; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:8px;">
+          <span style="font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px;">Line colors</span>
+          <label style="font-size:12px; display:flex; align-items:center; gap:4px; cursor:pointer;" title="One color ramp from oldest (light) to newest (dark): shows order, but neighboring quarters look alike">
+            <input type="radio" name="evo-colors" value="ramp" checked> Time ramp
+          </label>
+          <label style="font-size:12px; display:flex; align-items:center; gap:4px; cursor:pointer;" title="A clearly different color per quarter, with marker shapes where colors repeat">
+            <input type="radio" name="evo-colors" value="distinct"> Distinct
+          </label>
+          <button class="export-btn" id="evo-shuffle" title="Reassign the distinct colors; neighboring quarters always stay easy to tell apart">
+            &#8635; Shuffle colors
+          </button>
+        </div>
+        <div id="evo-chart"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -606,7 +624,10 @@ const DEFAULT_LAYOUT = {
   if (el) el.textContent = QUARTER_RANGE;
 });
 
-function vintBucket(age) { return age === 1 ? 2 : age <= 3 ? 1 : 0; }
+// Index into VINTAGE_LABELS (["New (1 qtr)", "2-3 qtrs", "4+ qtrs"]). Note this is
+// NOT the Python vintage_bucket() index, which counts the other way (0 = 4+) and
+// goes through VINTAGE_IDX_TO_LABEL; mixing the two swaps New and 4+.
+function vintBucket(age) { return age === 1 ? 0 : age <= 3 ? 1 : 2; }
 
 // ── Checkbox / Select builders ───────────────────────────────────────────────
 function buildCheckboxes(containerId, items, values, onChange) {
@@ -726,6 +747,12 @@ function addForecastTraces(traces, prefix) {
 const ALL_QUARTERS = [...new Set(D.map(r => r.report_quarter))].sort();
 const SNAP_PROJ_COLS = ['proj_id','project_stage','segment','territory','announced_load_mw','initial_service_date','project_age','match_confidence'];
 
+// Quarter animation timing. The bar transition must stay shorter than the step
+// so each quarter comes to rest before the next one starts. The animated GIF
+// export uses the same timing.
+const ANIM_STEP_MS = 750;
+const ANIM_TRANSITION_MS = 400;
+
 function renderSnapshot(opts) {
   const animate = opts && opts.animate;
   const quarter = document.getElementById('snap-quarter').value;
@@ -739,6 +766,45 @@ function renderSnapshot(opts) {
     return;
   }
 
+  const { traces: allTraces, layout } = buildSnapshotFigure(quarter, stages, segments, animate);
+
+  // Subtitle
+  const stageFiltered = D.filter(r => r.report_quarter === quarter && stages.includes(r.project_stage) && segments.includes(r.segment));
+  const totalMw = {};
+  stageFiltered.forEach(r => { totalMw[r.planning_year] = (totalMw[r.planning_year] || 0) + r.load_mw; });
+  const peak = getPeakStats(totalMw);
+  document.getElementById('snap-subtitle').innerHTML = `${quarter} snapshot &middot; Peak planning year: <strong>${peak.year}</strong> at <strong>${peak.mw} MW</strong> total`;
+
+  if (animate) {
+    Plotly.react('snap-chart', allTraces, layout, { transition: { duration: ANIM_TRANSITION_MS, easing: 'cubic-in-out' }, frame: { duration: ANIM_TRANSITION_MS } });
+  } else {
+    Plotly.react('snap-chart', allTraces, layout);
+  }
+
+  // Project table
+  const projRows = TABLE.filter(r => r.report_quarter === quarter && stages.includes(r.project_stage) && segments.includes(r.segment));
+  buildTable('snap-table-wrap', projRows, SNAP_PROJ_COLS);
+
+  // Wire search
+  const searchEl = document.getElementById('snap-table-search');
+  searchEl.oninput = function() {
+    const q = this.value.toLowerCase().trim();
+    if (!q) {
+      buildTable('snap-table-wrap', projRows, SNAP_PROJ_COLS);
+      return;
+    }
+    const filteredRows = projRows.filter(r =>
+      Object.values(r).some(v => v != null && String(v).toLowerCase().includes(q))
+    );
+    buildTable('snap-table-wrap', filteredRows, SNAP_PROJ_COLS);
+  };
+}
+
+// Traces + layout for one quarter's snapshot chart, with no side effects, so the
+// on-screen chart and the animated GIF export draw identical frames. With
+// `lockY`, the y-axis is fixed to the final quarter's peak (animation mode).
+function buildSnapshotFigure(quarter, stages, segments, lockY) {
+  const animate = lockY;
   const filtered = D.filter(r => r.report_quarter === quarter && segments.includes(r.segment));
   const grouped = {};
   filtered.forEach(r => {
@@ -799,38 +865,7 @@ function renderSnapshot(opts) {
     height: 480,
   };
 
-  // Subtitle
-  const stageFiltered = D.filter(r => r.report_quarter === quarter && stages.includes(r.project_stage) && segments.includes(r.segment));
-  const totalMw = {};
-  stageFiltered.forEach(r => { totalMw[r.planning_year] = (totalMw[r.planning_year] || 0) + r.load_mw; });
-  const peak = getPeakStats(totalMw);
-  document.getElementById('snap-subtitle').innerHTML = `${quarter} snapshot &middot; Peak planning year: <strong>${peak.year}</strong> at <strong>${peak.mw} MW</strong> total`;
-
-  const allTraces = addForecastTraces(traces, 'snap');
-
-  if (animate) {
-    Plotly.react('snap-chart', allTraces, layout, { transition: { duration: 800, easing: 'cubic-in-out' }, frame: { duration: 800 } });
-  } else {
-    Plotly.react('snap-chart', allTraces, layout);
-  }
-
-  // Project table
-  const projRows = TABLE.filter(r => r.report_quarter === quarter && stages.includes(r.project_stage) && segments.includes(r.segment));
-  buildTable('snap-table-wrap', projRows, SNAP_PROJ_COLS);
-
-  // Wire search
-  const searchEl = document.getElementById('snap-table-search');
-  searchEl.oninput = function() {
-    const q = this.value.toLowerCase().trim();
-    if (!q) {
-      buildTable('snap-table-wrap', projRows, SNAP_PROJ_COLS);
-      return;
-    }
-    const filteredRows = projRows.filter(r =>
-      Object.values(r).some(v => v != null && String(v).toLowerCase().includes(q))
-    );
-    buildTable('snap-table-wrap', filteredRows, SNAP_PROJ_COLS);
-  };
+  return { traces: addForecastTraces(traces, 'snap'), layout };
 }
 
 // ── Animation controller ─────────────────────────────────────────────────────
@@ -862,7 +897,7 @@ function playAnimation() {
   }
 
   step();
-  animTimer = setInterval(step, 1500);
+  animTimer = setInterval(step, ANIM_STEP_MS);
 }
 
 document.getElementById('snap-play').addEventListener('click', () => {
@@ -888,7 +923,56 @@ document.getElementById('snap-next').addEventListener('click', () => {
 // series that remain.
 const QUARTER_COLORS = META.quarter_colors || {};
 const FALLBACK_QUARTER_COLOR = '#64748b';
-function quarterColor(q) { return QUARTER_COLORS[q] || FALLBACK_QUARTER_COLOR; }
+
+// "Distinct" line colors: an 8-hue categorical palette (dataviz skill reference
+// palette, light mode) for when the time ramp's neighbors look too alike. It is
+// validated only in this order, so quarters adjacent in time get adjacent slots.
+// Past 8 quarters, hues repeat with a different marker shape. Shuffle draws
+// random assignments but rejects any that puts a weak pair, or a repeated hue,
+// on quarters adjacent in time. WEAK_HUE_PAIRS = pairs that fail or sit at the
+// floor of the validator's CVD / normal-vision checks on the #fafafa plot.
+const DISTINCT_HUES = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
+const WEAK_HUE_PAIRS = new Set(['0-6', '1-3', '1-4', '1-5', '1-7', '2-4', '2-7', '4-7', '5-7']);
+const DISTINCT_SYMBOLS = ['circle', 'square', 'diamond', 'triangle-up'];
+
+function defaultDistinct() {
+  return QUARTERS.map((q, i) => ({
+    hue: i % DISTINCT_HUES.length,
+    symbol: DISTINCT_SYMBOLS[Math.floor(i / DISTINCT_HUES.length) % DISTINCT_SYMBOLS.length],
+  }));
+}
+function distinctOk(combos) {
+  for (let i = 1; i < combos.length; i++) {
+    const a = combos[i - 1].hue, b = combos[i].hue;
+    if (a === b || WEAK_HUE_PAIRS.has(`${Math.min(a, b)}-${Math.max(a, b)}`)) return false;
+  }
+  return true;
+}
+let distinctCombos = defaultDistinct();
+function shuffleDistinct() {
+  const prev = JSON.stringify(distinctCombos);
+  for (let attempt = 0; attempt < 5000; attempt++) {
+    const c = defaultDistinct();
+    for (let i = c.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [c[i], c[j]] = [c[j], c[i]];
+    }
+    if (distinctOk(c) && JSON.stringify(c) !== prev) { distinctCombos = c; return; }
+  }
+}
+
+function evoColorMode() {
+  const el = document.querySelector('input[name="evo-colors"]:checked');
+  return el ? el.value : 'ramp';
+}
+// Keyed by quarter, so filtering the chart never repaints the remaining series.
+function quarterStyle(q) {
+  if (evoColorMode() === 'distinct') {
+    const c = distinctCombos[QUARTERS.indexOf(q)];
+    if (c) return { color: DISTINCT_HUES[c.hue], symbol: c.symbol };
+  }
+  return { color: QUARTER_COLORS[q] || FALLBACK_QUARTER_COLOR, symbol: 'circle' };
+}
 
 function renderEvolution() {
   const quarters = getChecked('evo-quarters');
@@ -917,8 +1001,9 @@ function renderEvolution() {
     filtered.forEach(r => { const k = r.report_quarter + '|' + r.planning_year; grouped[k] = (grouped[k] || 0) + r.load_mw; });
     quartersSorted.forEach(q => {
       const yVals = years.map(y => grouped[q + '|' + y] || 0);
+      const st = quarterStyle(q);
       traces.push({ x: years, y: yVals, mode: 'lines+markers', name: q,
-        line: { color: quarterColor(q), width: 2.5 }, marker: { size: 7 },
+        line: { color: st.color, width: 2.5 }, marker: { size: 8, symbol: st.symbol },
         hovertemplate: `<b>%{x}</b><br>${q}: %{y:,.0f} MW<extra></extra>` });
     });
   } else {
@@ -930,10 +1015,11 @@ function renderEvolution() {
       quartersSorted.forEach(q => {
         const yVals = years.map(y => grouped[q + '|' + stage + '|' + y] || 0);
         if (yVals.every(v => v === 0)) return;
+        const st = quarterStyle(q);
         traces.push({ x: years, y: yVals, mode: 'lines+markers', name: q,
           legendgroup: stage, legendgrouptitle: { text: stage },
-          line: { color: quarterColor(q), width: 1.8, dash: dashes[si % dashes.length] },
-          marker: { size: 5 },
+          line: { color: st.color, width: 1.8, dash: dashes[si % dashes.length] },
+          marker: { size: 6, symbol: st.symbol },
           hovertemplate: `<b>%{x}</b><br>${q} ${stage}: %{y:,.0f} MW<extra></extra>` });
       });
     });
@@ -1288,110 +1374,210 @@ async function _getExportFontCSS() {
   return _exportFontCSS;
 }
 
+// Blog-friendly export size: narrower than the full responsive container, with
+// the on-screen aspect ratio.
+const EXPORT_WIDTH = 900;
+function exportSize(gd, layout) {
+  const origHeight = layout.height || 480;
+  const origWidth = (gd && gd.offsetWidth) || 1200;
+  return { width: EXPORT_WIDTH, height: Math.max(420, Math.round(EXPORT_WIDTH * (origHeight / origWidth))) };
+}
+
+// Export layout: the on-screen layout with larger fonts on title, axes and legend.
+function buildExportLayout(origLayout, width, height) {
+  const axisTitle = origLayout.xaxis && origLayout.xaxis.title;
+  const yAxisTitle = origLayout.yaxis && origLayout.yaxis.title;
+  return JSON.parse(JSON.stringify({
+    ...origLayout,
+    width, height,
+    autosize: false,
+    font: { family: FONT_REGULAR },
+    title: {
+      ...(origLayout.title || {}),
+      y: 0.96, yanchor: 'top',
+      font: { size: 20, weight: 700, color: '#0f172a', family: FONT_BOLD }
+    },
+    xaxis: {
+      ...origLayout.xaxis,
+      title: { ...(typeof axisTitle === 'string' ? { text: axisTitle } : (axisTitle || {})), font: { size: 16, color: '#475569', weight: 700, family: FONT_BOLD } },
+      tickfont: { size: 14, color: '#334155', family: FONT_REGULAR },
+    },
+    yaxis: {
+      ...origLayout.yaxis,
+      title: { ...(typeof yAxisTitle === 'string' ? { text: yAxisTitle } : (yAxisTitle || {})), font: { size: 16, color: '#475569', weight: 700, family: FONT_BOLD }, standoff: 20 },
+      tickfont: { size: 14, color: '#334155', family: FONT_REGULAR },
+    },
+    legend: {
+      ...(origLayout.legend || {}),
+      y: 1.01, yanchor: 'bottom',
+      font: { size: 14, color: '#0f172a', family: FONT_REGULAR },
+      bgcolor: 'rgba(255,255,255,0)',
+      bordercolor: 'rgba(0,0,0,0)',
+      borderwidth: 0,
+    },
+    margin: { l: 100, r: 30, t: 110, b: 90 },
+    paper_bgcolor: '#ffffff',
+    plot_bgcolor: '#ffffff',
+  }));
+}
+
+function makeOffscreenDiv(width) {
+  const div = document.createElement('div');
+  div.style.position = 'absolute';
+  div.style.left = '-99999px';
+  div.style.top = '0';
+  div.style.width = width + 'px';
+  document.body.appendChild(div);
+  return div;
+}
+
+function disposeOffscreenDiv(div) {
+  Plotly.purge(div);
+  document.body.removeChild(div);
+}
+
+// Draw a figure into an off-screen div and rasterize it to a canvas.
+// Plotly.toImage(png) serializes SVG -> canvas without the page's @font-face, so
+// the fonts are embedded into the SVG string as base64 before rasterizing.
+async function rasterizeFigure(div, traces, layout, width, height) {
+  await Plotly.react(div, traces, layout, { staticPlot: true, displayModeBar: false });
+  await new Promise(r => setTimeout(r, 50));
+
+  const fontCSS = await _getExportFontCSS();
+  const svgDataUri = await Plotly.toImage(div, { format: 'svg', width, height });
+  let svgText = decodeURIComponent(svgDataUri.replace('data:image/svg+xml,', ''));
+  const fontBlock = `<defs><style type="text/css"><![CDATA[${fontCSS}]]></style>`;
+  svgText = svgText.includes('<defs>')
+    ? svgText.replace('<defs>', fontBlock)
+    : svgText.replace(/(<svg[^>]*>)/, `$1${fontBlock}</defs>`);
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+    const blobUrl = URL.createObjectURL(blob);
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(blobUrl);
+      resolve(canvas);
+    };
+    img.onerror = e => { URL.revokeObjectURL(blobUrl); reject(e); };
+    img.src = blobUrl;
+  });
+}
+
+function downloadUrl(href, filename) {
+  const a = document.createElement('a');
+  a.href = href;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 async function exportGraphAsImage(divId, filename) {
   const btn = document.getElementById(divId === 'snap-chart' ? 'snap-export' : 'vint-export');
   if (btn) { btn.disabled = true; }
+  let exportDiv = null;
   try {
     const gd = document.getElementById(divId);
-    const traces = gd.data;
-    const origLayout = gd.layout;
-
-    // Blog-friendly dimensions: narrower than the full responsive container
-    const exportWidth = 900;
-    const origHeight = origLayout.height || 480;
-    const origWidth = gd.offsetWidth || 1200;
-    const exportHeight = Math.max(420, Math.round(exportWidth * (origHeight / origWidth)));
-
-    // Build an export layout: larger fonts on title, axes, and legend
-    const axisTitle = origLayout.xaxis && origLayout.xaxis.title;
-    const yAxisTitle = origLayout.yaxis && origLayout.yaxis.title;
-    const exportLayout = JSON.parse(JSON.stringify({
-      ...origLayout,
-      width: exportWidth,
-      height: exportHeight,
-      autosize: false,
-      font: { family: FONT_REGULAR },
-      title: {
-        ...(origLayout.title || {}),
-        y: 0.96, yanchor: 'top',
-        font: { size: 20, weight: 700, color: '#0f172a', family: FONT_BOLD }
-      },
-      xaxis: {
-        ...origLayout.xaxis,
-        title: { ...(typeof axisTitle === 'string' ? { text: axisTitle } : (axisTitle || {})), font: { size: 16, color: '#475569', weight: 700, family: FONT_BOLD } },
-        tickfont: { size: 14, color: '#334155', family: FONT_REGULAR },
-      },
-      yaxis: {
-        ...origLayout.yaxis,
-        title: { ...(typeof yAxisTitle === 'string' ? { text: yAxisTitle } : (yAxisTitle || {})), font: { size: 16, color: '#475569', weight: 700, family: FONT_BOLD }, standoff: 20 },
-        tickfont: { size: 14, color: '#334155', family: FONT_REGULAR },
-      },
-      legend: {
-        ...(origLayout.legend || {}),
-        y: 1.01, yanchor: 'bottom',
-        font: { size: 14, color: '#0f172a', family: FONT_REGULAR },
-        bgcolor: 'rgba(255,255,255,0)',
-        bordercolor: 'rgba(0,0,0,0)',
-        borderwidth: 0,
-      },
-      margin: { l: 100, r: 30, t: 110, b: 90 },
-      paper_bgcolor: '#ffffff',
-      plot_bgcolor: '#ffffff',
-    }));
-
-    // Render to a hidden off-screen div
-    const exportDiv = document.createElement('div');
-    exportDiv.style.position = 'absolute';
-    exportDiv.style.left = '-99999px';
-    exportDiv.style.top = '0';
-    exportDiv.style.width = exportWidth + 'px';
-    document.body.appendChild(exportDiv);
-
-    await Plotly.react(exportDiv, traces, exportLayout, { staticPlot: true, displayModeBar: false });
-    await new Promise(r => setTimeout(r, 50));
-
-    // Get SVG string, inject base64 fonts, then rasterize via canvas.
-    // Plotly.toImage(png) serializes SVG → canvas without the page's @font-face;
-    // embedding fonts directly in the SVG string is the reliable fix.
-    const fontCSS = await _getExportFontCSS();
-    const svgDataUri = await Plotly.toImage(exportDiv, { format: 'svg', width: exportWidth, height: exportHeight });
-    let svgText = decodeURIComponent(svgDataUri.replace('data:image/svg+xml,', ''));
-    const fontBlock = `<defs><style type="text/css"><![CDATA[${fontCSS}]]></style>`;
-    svgText = svgText.includes('<defs>')
-      ? svgText.replace('<defs>', fontBlock)
-      : svgText.replace(/(<svg[^>]*>)/, `$1${fontBlock}</defs>`);
-
-    const dataUrl = await new Promise((resolve, reject) => {
-      const img = new Image();
-      const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
-      const blobUrl = URL.createObjectURL(blob);
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = exportWidth; canvas.height = exportHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, exportWidth, exportHeight);
-        ctx.drawImage(img, 0, 0, exportWidth, exportHeight);
-        URL.revokeObjectURL(blobUrl);
-        resolve(canvas.toDataURL('image/png'));
-      };
-      img.onerror = e => { URL.revokeObjectURL(blobUrl); reject(e); };
-      img.src = blobUrl;
-    });
-
-    const a = document.createElement('a');
-    a.href = dataUrl;
-    a.download = filename + '.png';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    Plotly.purge(exportDiv);
-    document.body.removeChild(exportDiv);
+    const { width, height } = exportSize(gd, gd.layout);
+    exportDiv = makeOffscreenDiv(width);
+    const canvas = await rasterizeFigure(exportDiv, gd.data, buildExportLayout(gd.layout, width, height), width, height);
+    downloadUrl(canvas.toDataURL('image/png'), filename + '.png');
   } catch (err) {
     console.error('Export failed:', err);
     alert('Export failed: ' + (err && err.message ? err.message : err));
   } finally {
+    if (exportDiv) { disposeOffscreenDiv(exportDiv); }
     if (btn) { btn.disabled = false; }
+  }
+}
+
+// ── Animated GIF export (Snapshot tab) ───────────────────────────────────────
+// Renders every quarter with the current stage / segment / forecast filters,
+// using the same export styling as the PNG, and tweens the bars between
+// quarters to match the on-screen animation. Encoded in the browser with
+// gifenc, loaded on first use.
+const GIF_TWEEN_FRAMES = 5;       // in-between frames per quarter transition
+const GIF_FIRST_HOLD_MS = ANIM_STEP_MS;
+const GIF_FINAL_HOLD_MS = 2500;   // linger on the latest quarter before looping
+const GIFENC_URL = 'https://cdn.jsdelivr.net/npm/gifenc@1.0.3/dist/gifenc.esm.js';
+
+const easeCubicInOut = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+// Bars interpolated between two quarters' figures; everything else (forecast
+// lines, title, axes) is taken from the destination quarter, as on screen.
+function tweenFigure(from, to, t) {
+  const traces = to.traces.map((tr, i) => {
+    const src = from.traces[i];
+    if (tr.type !== 'bar' || !src) { return tr; }
+    return { ...tr, y: tr.y.map((y, j) => src.y[j] + (y - src.y[j]) * t) };
+  });
+  return { traces, layout: to.layout };
+}
+
+async function exportSnapshotGif() {
+  const btn = document.getElementById('snap-export-gif');
+  const label = btn.querySelector('.btn-label');
+  const idleText = label.textContent;
+  const stages = getChecked('snap-stages');
+  const segments = getChecked('snap-segments');
+  if (!stages.length || !segments.length) {
+    alert('Select at least one pipeline stage and one segment to export an animation.');
+    return;
+  }
+
+  btn.disabled = true;
+  let exportDiv = null;
+  try {
+    label.textContent = 'Preparing…';
+    const { GIFEncoder, quantize, applyPalette } = await import(GIFENC_URL);
+
+    const figs = ALL_QUARTERS.map(q => buildSnapshotFigure(q, stages, segments, true));
+    const { width, height } = exportSize(document.getElementById('snap-chart'), figs[0].layout);
+
+    // Frame plan: hold each quarter, then tween into the next one.
+    const frames = [];
+    const tweenDelay = Math.round(ANIM_TRANSITION_MS / GIF_TWEEN_FRAMES);
+    figs.forEach((fig, i) => {
+      if (i > 0) {
+        for (let k = 1; k <= GIF_TWEEN_FRAMES; k++) {
+          frames.push({ fig: tweenFigure(figs[i - 1], fig, easeCubicInOut(k / (GIF_TWEEN_FRAMES + 1))), delay: tweenDelay });
+        }
+      }
+      const delay = i === 0 ? GIF_FIRST_HOLD_MS
+        : i === figs.length - 1 ? GIF_FINAL_HOLD_MS
+        : ANIM_STEP_MS - ANIM_TRANSITION_MS;
+      frames.push({ fig, delay });
+    });
+
+    exportDiv = makeOffscreenDiv(width);
+    const gif = GIFEncoder();
+    for (let f = 0; f < frames.length; f++) {
+      label.textContent = `Rendering ${f + 1}/${frames.length}…`;
+      const { fig, delay } = frames[f];
+      const canvas = await rasterizeFigure(exportDiv, fig.traces, buildExportLayout(fig.layout, width, height), width, height);
+      const { data } = canvas.getContext('2d').getImageData(0, 0, width, height);
+      const palette = quantize(data, 256);
+      gif.writeFrame(applyPalette(data, palette), width, height, { palette, delay });
+    }
+    gif.finish();
+
+    const blobUrl = URL.createObjectURL(new Blob([gif.bytes()], { type: 'image/gif' }));
+    const first = ALL_QUARTERS[0], last = ALL_QUARTERS[ALL_QUARTERS.length - 1];
+    downloadUrl(blobUrl, `ga-power-pipeline-by-stage-${first}-to-${last}.gif`);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+  } catch (err) {
+    console.error('GIF export failed:', err);
+    alert('GIF export failed: ' + (err && err.message ? err.message : err));
+  } finally {
+    if (exportDiv) { disposeOffscreenDiv(exportDiv); }
+    label.textContent = idleText;
+    btn.disabled = false;
   }
 }
 
@@ -1506,6 +1692,13 @@ yrLo.addEventListener('change', updateYears);
 yrHi.addEventListener('change', updateYears);
 
 document.querySelectorAll('input[name="evo-agg"]').forEach(el => el.addEventListener('change', renderEvolution));
+document.querySelectorAll('input[name="evo-colors"]').forEach(el => el.addEventListener('change', renderEvolution));
+document.getElementById('evo-shuffle').addEventListener('click', () => {
+  // Shuffling only means something for distinct colors; switch to them.
+  document.querySelector('input[name="evo-colors"][value="distinct"]').checked = true;
+  shuffleDistinct();
+  renderEvolution();
+});
 document.getElementById('evo-all').addEventListener('click', () => { setAll('evo-quarters', true); renderEvolution(); });
 document.getElementById('evo-none').addEventListener('click', () => { setAll('evo-quarters', false); renderEvolution(); });
 document.getElementById('evo-seg-all').addEventListener('click', () => { setAll('evo-segments', true); renderEvolution(); });
@@ -1540,6 +1733,10 @@ document.getElementById('vint-fc-none').addEventListener('click', () => { setAll
 document.getElementById('snap-export').addEventListener('click', () => {
   const q = document.getElementById('snap-quarter').value;
   exportGraphAsImage('snap-chart', `ga-power-pipeline-by-stage-${q}`);
+});
+document.getElementById('snap-export-gif').addEventListener('click', () => {
+  stopAnimation();
+  exportSnapshotGif();
 });
 document.getElementById('vint-export').addEventListener('click', () => {
   const q = document.getElementById('vint-quarter').value;

@@ -202,7 +202,7 @@ app = Dash(
 
 app.layout = html.Div([
     dcc.Store(id='snap-anim-store', data={'playing': False}),
-    dcc.Interval(id='snap-anim-interval', interval=1500, disabled=True),
+    dcc.Interval(id='snap-anim-interval', interval=750, disabled=True),
     html.Div([
         html.H2("Georgia Power Large Load Economic Development Pipeline",
                 style={"margin": "0", "fontWeight": "700", "fontSize": "22px", "color": "#1a1a2e"}),
@@ -516,7 +516,7 @@ def update_snapshot(quarter, stages, segments, anim_state):
         margin=dict(l=60, r=20, t=60, b=60), hovermode="x unified",
     )
     if anim_state and anim_state.get("playing"):
-        layout_kwargs["transition"] = {"duration": 800, "easing": "cubic-in-out"}
+        layout_kwargs["transition"] = {"duration": 400, "easing": "cubic-in-out"}
     fig.update_layout(**layout_kwargs)
 
     peak_yr = int(total_mw.idxmax()) if not total_mw.empty else "—"
