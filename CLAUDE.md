@@ -276,6 +276,15 @@ before changing any step.
    `ANIM_TRANSITION_MS`, which also drive the on-screen Animate button (750 /
    400 ms; the Dash app's interval mirrors them). Exports fetch the Interstate
    fonts from `assets/`, so test them over HTTP, not `file://`.
+   The Snapshot chart's **Peak to date** overlay (`peakToDate()`) draws, per
+   planning year, the highest combined load in any report up to the selected
+   quarter, for the selected stages / segments. The shadows are `layout.shapes`
+   on the `below` layer (Plotly cannot overlay bars under a stack), with an
+   invisible marker trace for the unified hover and an empty bar trace for the
+   legend. The animation's locked y-axis covers the highest value of any
+   quarter, not just the last. Snapshot and Vintage both have Planning Years
+   From/To selects (`initYearRange()` / `yearRange()`); forecast overlays are
+   clipped to the range so they can't stretch the y-axis.
 
 10. **Filing formats drift between quarters, and the parsers now absorb it.**
     The Q2 2026 workbook changed four things at once, each of which silently

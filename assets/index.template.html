@@ -422,6 +422,14 @@
         <select id="snap-year-hi" aria-label="Last planning year"></select>
       </div>
     </div>
+    <div class="filter-group compact">
+      <label>Overlay</label>
+      <div class="pill-checkboxes">
+        <label title="A shadow behind each year's bar at the highest combined load that year has reached in any report up to the selected quarter (for the selected stages and segments)">
+          <input type="checkbox" id="snap-peak" checked> Peak to date
+        </label>
+      </div>
+    </div>
     <div class="filter-group" id="snap-fc-group">
       <label>Load Forecasts</label>
       <div class="filter-tools">
@@ -594,6 +602,14 @@
         </div>
       </div>
       <div class="pill-checkboxes" id="vint-segments"></div>
+    </div>
+    <div class="filter-group compact">
+      <label>Planning Years</label>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <select id="vint-year-lo" aria-label="First planning year"></select>
+        <span style="font-size:12px; color:var(--muted);">to</span>
+        <select id="vint-year-hi" aria-label="Last planning year"></select>
+      </div>
     </div>
     <div class="filter-group" id="vint-fc-group">
       <label>Load Forecasts</label>
@@ -925,16 +941,19 @@ function buildSnapshotFigure(quarter, stages, segments, lockY) {
     gridcolor: 'rgba(0,0,0,0.07)',
     zeroline: false,
   };
+  // Combined load per (quarter, year) for the selected stages / segments / years:
+  // feeds both the peak-to-date shadow and the animation's locked y-axis.
+  const totals = snapTotalsByQuarter(stages, segments, yrLo, yrHi);
   if (animate) {
-    const finalQ = ALL_QUARTERS[ALL_QUARTERS.length - 1];
-    const finalData = D.filter(r => r.report_quarter === finalQ && stages.includes(r.project_stage) &&
-      segments.includes(r.segment) && r.planning_year >= yrLo && r.planning_year <= yrHi);
-    const byYear = {};
-    finalData.forEach(r => { byYear[r.planning_year] = (byYear[r.planning_year] || 0) + r.load_mw; });
-    const finalMax = Math.max(0, ...Object.values(byYear));
-    yaxisOpts.range = [0, finalMax * 1.05];
+    // Lock to the highest value any frame can show (bars or peak shadow), so
+    // the axis never rescales mid-animation.
+    let maxAll = 0;
+    Object.values(totals).forEach(byYear => Object.values(byYear).forEach(v => { if (v > maxAll) maxAll = v; }));
+    yaxisOpts.range = [0, maxAll * 1.05];
     yaxisOpts.autorange = false;
   }
+  const peak = document.getElementById('snap-peak').checked
+    ? peakToDate(totals, quarter, years) : null;
 
   const layout = {
     ...DEFAULT_LAYOUT,
@@ -966,16 +985,85 @@ function buildSnapshotFigure(quarter, stages, segments, lockY) {
     const keep = t.x.map(x => x >= yrLo && x <= yrHi);
     return { ...t, x: t.x.filter((_, i) => keep[i]), y: t.y.filter((_, i) => keep[i]) };
   });
+
+  if (peak) {
+    // Shadows are shapes on the 'below' layer, so they sit behind the stacked
+    // bars and show only where a year is below its high-water mark. Same width
+    // as the bars (default bargap 0.2 -> 0.8 of a year).
+    layout.shapes = years.map((y, i) => ({
+      type: 'rect', layer: 'below', xref: 'x', yref: 'y',
+      x0: y - 0.4, x1: y + 0.4, y0: 0, y1: peak.mw[i],
+      fillcolor: PEAK_SHADOW_FILL, line: { color: PEAK_SHADOW_LINE, width: 1, dash: 'dot' },
+    }));
+    // Invisible markers at each peak so the unified hover reports it...
+    allTraces.push({
+      x: years, y: peak.mw, customdata: peak.setIn, type: 'scatter', mode: 'markers',
+      marker: { size: 1, opacity: 0 }, showlegend: false, name: 'Peak to date',
+      hovertemplate: `Peak to date: %{y:,.0f} MW (set in %{customdata})<extra></extra>`,
+    });
+    // ...and an empty bar trace that only supplies the legend swatch.
+    allTraces.push({
+      x: [null], y: [null], type: 'bar', name: 'Peak to date', hoverinfo: 'skip',
+      marker: { color: PEAK_SHADOW_FILL, line: { color: PEAK_SHADOW_LINE, width: 1 } },
+    });
+  }
   return { traces: allTraces, layout };
 }
 
-// Planning-year range chosen on the Snapshot tab (defaults to every year).
-function snapYearRange() {
-  const lo = parseInt(document.getElementById('snap-year-lo').value);
-  const hi = parseInt(document.getElementById('snap-year-hi').value);
+// ── Peak-to-date shadow ──────────────────────────────────────────────────────
+const PEAK_SHADOW_FILL = 'rgba(71, 85, 105, 0.13)';
+const PEAK_SHADOW_LINE = 'rgba(71, 85, 105, 0.55)';
+
+// { quarter: { year: combined MW } } for the selected stages, segments and years.
+function snapTotalsByQuarter(stages, segments, yrLo, yrHi) {
+  const totals = {};
+  D.forEach(r => {
+    if (!stages.includes(r.project_stage) || !segments.includes(r.segment)) return;
+    if (r.planning_year < yrLo || r.planning_year > yrHi) return;
+    const q = totals[r.report_quarter] || (totals[r.report_quarter] = {});
+    q[r.planning_year] = (q[r.planning_year] || 0) + r.load_mw;
+  });
+  return totals;
+}
+
+// For each year: the highest combined load in any quarter up to and including
+// `quarter`, and the first quarter that reached it.
+function peakToDate(totals, quarter, years) {
+  const upTo = ALL_QUARTERS.slice(0, ALL_QUARTERS.indexOf(quarter) + 1);
+  const mw = [], setIn = [];
+  years.forEach(y => {
+    let best = 0, bestQ = quarter;
+    upTo.forEach(q => {
+      const v = (totals[q] && totals[q][y]) || 0;
+      if (v > best + 1e-9) { best = v; bestQ = q; }
+    });
+    mw.push(best); setIn.push(bestQ);
+  });
+  return { mw, setIn };
+}
+
+// Planning-year From/To selects (Snapshot and Vintage tabs). Defaults to every
+// year; From > To is resolved by swapping, as on the Evolution tab.
+function yearRange(prefix) {
+  const lo = parseInt(document.getElementById(`${prefix}-year-lo`).value);
+  const hi = parseInt(document.getElementById(`${prefix}-year-hi`).value);
   if (isNaN(lo) || isNaN(hi)) return [YEARS[0], YEARS[YEARS.length - 1]];
   return [Math.min(lo, hi), Math.max(lo, hi)];
 }
+function initYearRange(prefix, onChange) {
+  const lo = document.getElementById(`${prefix}-year-lo`);
+  const hi = document.getElementById(`${prefix}-year-hi`);
+  const last = YEARS[YEARS.length - 1];
+  lo.innerHTML = YEARS.map(y => `<option value="${y}" ${y === YEARS[0] ? 'selected' : ''}>${y}</option>`).join('');
+  hi.innerHTML = YEARS.map(y => `<option value="${y}" ${y === last ? 'selected' : ''}>${y}</option>`).join('');
+  const handler = () => {
+    if (parseInt(lo.value) > parseInt(hi.value)) { const t = lo.value; lo.value = hi.value; hi.value = t; }
+    onChange();
+  };
+  lo.addEventListener('change', handler);
+  hi.addEventListener('change', handler);
+}
+const snapYearRange = () => yearRange('snap');
 
 // ── Animation controller ─────────────────────────────────────────────────────
 let animTimer = null;
@@ -1409,8 +1497,10 @@ function renderVintage() {
     return;
   }
 
+  const [yrLo, yrHi] = yearRange('vint');
   const filtered = D.filter(r =>
-    r.report_quarter === quarter && stages.includes(r.project_stage) && segments.includes(r.segment)
+    r.report_quarter === quarter && stages.includes(r.project_stage) && segments.includes(r.segment) &&
+    r.planning_year >= yrLo && r.planning_year <= yrHi
   ).map(r => {
     const vi = vintBucket(r.project_age);
     return { ...r, vintage_idx: vi, vintage_label: VINTAGE_LABELS[vi] };
@@ -1449,13 +1539,18 @@ function renderVintage() {
       x: 0.5, xanchor: 'center', y: 0.96, yanchor: 'top',
       font: { size: 20, weight: 700, color: '#0f172a', family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif' }
     },
-    xaxis: { title: 'Planning Year', tickmode: 'linear', dtick: 1 },
+    xaxis: { title: 'Planning Year', tickmode: 'linear', dtick: 1, range: [yrLo - 0.5, yrHi + 0.5], autorange: false },
     yaxis: { title: 'Total Pipeline MW', tickformat: ',' },
     legend: { groupclick: 'toggleitem', orientation: 'v', x: 1.01, y: 1, font: { size: 11 } },
     plot_bgcolor: '#fafafa',
     margin: { l: 60, r: 220, t: 70, b: 60 }, height: 480,
   };
-  const allTraces = addForecastTraces(traces, 'vint');
+  // Clip forecast overlays to the selected years, as on the Snapshot tab.
+  const allTraces = addForecastTraces(traces, 'vint').map(t => {
+    if (t.type === 'bar' || !Array.isArray(t.x)) return t;
+    const keep = t.x.map(x => x >= yrLo && x <= yrHi);
+    return { ...t, x: t.x.filter((_, i) => keep[i]), y: t.y.filter((_, i) => keep[i]) };
+  });
   Plotly.react('vint-chart', allTraces, layout);
 }
 
@@ -1626,7 +1721,12 @@ function tweenFigure(from, to, t) {
     if (tr.type !== 'bar' || !src) { return tr; }
     return { ...tr, y: tr.y.map((y, j) => src.y[j] + (y - src.y[j]) * t) };
   });
-  return { traces, layout: to.layout };
+  // Peak-to-date shadows grow with the bars rather than jumping.
+  const fromShapes = from.layout.shapes || [], toShapes = to.layout.shapes || [];
+  const layout = toShapes.length && toShapes.length === fromShapes.length
+    ? { ...to.layout, shapes: toShapes.map((s, i) => ({ ...s, y1: fromShapes[i].y1 + (s.y1 - fromShapes[i].y1) * t })) }
+    : to.layout;
+  return { traces, layout };
 }
 
 async function exportSnapshotGif() {
@@ -1773,20 +1873,8 @@ function snapFilterChange() { stopAnimation(); renderSnapshot(); }
 buildSelect('snap-quarter', QUARTERS, snapFilterChange, LATEST_QUARTER);
 buildCheckboxes('snap-stages', STAGES, STAGES, snapFilterChange);
 buildCheckboxes('snap-segments', SEGMENTS, SEGMENTS, snapFilterChange);
-(function initSnapYears() {
-  const lo = document.getElementById('snap-year-lo');
-  const hi = document.getElementById('snap-year-hi');
-  const last = YEARS[YEARS.length - 1];
-  lo.innerHTML = YEARS.map(y => `<option value="${y}" ${y === YEARS[0] ? 'selected' : ''}>${y}</option>`).join('');
-  hi.innerHTML = YEARS.map(y => `<option value="${y}" ${y === last ? 'selected' : ''}>${y}</option>`).join('');
-  const onChange = () => {
-    // Keep From <= To by swapping, as the Evolution tab does.
-    if (parseInt(lo.value) > parseInt(hi.value)) { const t = lo.value; lo.value = hi.value; hi.value = t; }
-    snapFilterChange();
-  };
-  lo.addEventListener('change', onChange);
-  hi.addEventListener('change', onChange);
-})();
+initYearRange('snap', snapFilterChange);
+document.getElementById('snap-peak').addEventListener('change', snapFilterChange);
 document.getElementById('snap-seg-all').addEventListener('click', () => { setAll('snap-segments', true); snapFilterChange(); });
 document.getElementById('snap-seg-none').addEventListener('click', () => { setAll('snap-segments', false); snapFilterChange(); });
 document.getElementById('snap-stage-all').addEventListener('click', () => { setAll('snap-stages', true); snapFilterChange(); });
@@ -1844,6 +1932,7 @@ document.getElementById('vint-stage-all').addEventListener('click', () => { setA
 document.getElementById('vint-stage-none').addEventListener('click', () => { setAll('vint-stages', false); renderVintage(); });
 buildCheckboxes('vint-vintages', VINTAGE_LABELS, VINTAGE_LABELS, renderVintage);
 buildCheckboxes('vint-segments', SEGMENTS, SEGMENTS, renderVintage);
+initYearRange('vint', renderVintage);
 document.getElementById('vint-vint-all').addEventListener('click', () => { setAll('vint-vintages', true); renderVintage(); });
 document.getElementById('vint-vint-none').addEventListener('click', () => { setAll('vint-vintages', false); renderVintage(); });
 document.getElementById('vint-seg-all').addEventListener('click', () => { setAll('vint-segments', true); renderVintage(); });
