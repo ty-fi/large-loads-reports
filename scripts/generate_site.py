@@ -27,10 +27,18 @@ STAGE_COLORS = {
     "Request for Service": "#529cba",
     "Contract for Electric Service": "#005d7f",
 }
+# One hue family per stage (the dataviz reference palette's first three
+# categorical hues, the only slots that validate all-pairs), stepped dark -> light
+# for New -> 2-3 -> 4+ quarters. Built in OKLCh at a fixed hue per stage and
+# checked with the dataviz validator on the #fafafa plot: each ramp passes the
+# ordinal checks (monotone L, gaps >= 0.06, light end >= 2:1), and the full
+# 9-segment stack passes adjacent CVD (worst 13.6) and normal-vision (worst 15.0)
+# separation. Aqua sits at hue 155 with L 0.44/0.59/0.74: it is the tightest
+# family, so re-validate before nudging it.
 VINTAGE_COLORS = {
-    "Technical Review":              ["#5da8ca", "#9bcce3", "#c8e4f2"],
-    "Request for Service":           ["#2d6e8a", "#529cba", "#88c0d6"],
-    "Contract for Electric Service": ["#003f58", "#005d7f", "#4091af"],
+    "Technical Review":              ["#006337", "#009655", "#00cb75"],
+    "Request for Service":           ["#913100", "#d25117", "#ff885c"],
+    "Contract for Electric Service": ["#0053a6", "#3280de", "#74b0ff"],
 }
 VINTAGE_LABELS = ["New (1 qtr)", "2-3 qtrs", "4+ qtrs"]
 VINTAGE_IDX_TO_LABEL = {0: "4+ qtrs", 1: "2-3 qtrs", 2: "New (1 qtr)"}
@@ -524,7 +532,40 @@ table_data = df_proj[[
     "announced_load_mw", "initial_service_date", "project_age", "match_confidence",
 ]].to_dict("records")
 
+# Per-quarter matching inventory from assign_project_ids.py, shown in the
+# "About this data" panel. Missing values (the seed quarter has no prior quarter
+# to compare against) become null rather than NaN.
+df_match = pd.read_csv(COMBINED_DIR / "match_summary.csv")
+match_summary = [
+    {k: (None if pd.isna(v) else (v if isinstance(v, (bool, str)) else int(v)))
+     for k, v in row.items()}
+    for row in df_match.to_dict("records")
+]
+
+# Known filing quirks behind the quarters where matching departs from the
+# filing's own bookkeeping. Update when a new quarter shows a mismatch.
+MATCH_NOTES = {
+    "2024Q4": "One in-service date changed without its change flag set "
+              "(a 600 MW data center, Q4 2026 to Q1 2026).",
+    "2025Q1": "One stage change has no change flag or Stage Change row "
+              "(a 311 MW data center, Request for Service to Contract for Electric Service).",
+    "2025Q4": "Three clean energy projects already in service had their in-service "
+              "dates rewritten (2023-2024 to Q4 2025) without the change flag set.",
+    "2025Q3": "Revised filing. About 40 load ramps and 10 announced loads changed "
+              "without their change flags set, so many matches rank high or low "
+              "even though the other attributes agree. One unchanged 146 MW project "
+              "is flagged new and is continued instead; one Removed Projects row "
+              "matches no project still in the prior quarter.",
+    "2026Q1": "The Main sheet omits the new-project flag on a 216 MW project that "
+              "the Projects Added sheet lists; it is treated as new.",
+    "2026Q3": "The same 216 MW project is flagged new again, but it is not on the "
+              "Projects Added sheet and differs from Q2 only by a one-year date "
+              "slip; it is continued.",
+}
+
 EMBEDDED = {
+    "match_summary": match_summary,
+    "match_notes": MATCH_NOTES,
     "long": df_long.to_dict("records"),
     "changes": df_changes.to_dict("records"),
     "table": table_data,

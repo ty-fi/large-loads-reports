@@ -668,7 +668,22 @@ def main():
                   f"{outcome['vanished']} vanished unexplained")
         if overrides:
             print(f"  NOTE: {overrides} project(s) assigned against their New Project? flag")
-        summary.append((quarter, len(projects), counts, outcome, overrides))
+        summary.append({
+            'report_quarter': quarter,
+            'projects': len(projects),
+            'flagged_new': flagged,
+            'new': counts['new'] + counts['seed'],
+            'exact': counts['exact'], 'high': counts['high'], 'low': counts['low'],
+            'removed_listed': len(sheets['removed']),
+            'removed_matched': outcome.get('removed_ok', 0),
+            'removed_load_mismatch': outcome.get('removed_miss', 0),
+            'vanished': outcome.get('vanished', 0),
+            'flag_overrides': overrides,
+            'load_changes_listed': len(sheets['load']),
+            'date_changes_listed': len(sheets['date']),
+            'stage_changes_listed': len(sheets['stage']),
+            'seed': not outcome,
+        })
 
     # Output
     df = pd.DataFrame(all_rows)
@@ -690,14 +705,36 @@ def main():
     print(f"\nWrote {out}")
     print(f"  {len(df)} total rows, {df['proj_id'].nunique()} unique project IDs")
 
+    # Changes the matches imply (continuing projects whose attribute differs from
+    # their previous-quarter row), set beside the counts the filing's own change
+    # sheets list. Close agreement is the main evidence the matching is right.
+    by_q = {q: g.set_index('proj_id') for q, g in df.groupby('report_quarter')}
+    quarters_seen = [s['report_quarter'] for s in summary]
+    for i, s in enumerate(summary):
+        for col, key in (('announced_load_mw', 'load'), ('initial_service_date', 'date'),
+                         ('project_stage', 'stage')):
+            implied = None
+            if i > 0:
+                cur, prev = by_q[quarters_seen[i]], by_q[quarters_seen[i - 1]]
+                ids = cur.index.intersection(prev.index)
+                implied = int((cur.loc[ids, col] != prev.loc[ids, col]).sum())
+            s[f'{key}_changes_implied'] = implied
+
+    df_summary = pd.DataFrame(summary)
+    implied_cols = [c for c in df_summary.columns if c.endswith('_implied')]
+    df_summary[implied_cols] = df_summary[implied_cols].astype('Int64')
+    summary_out = COMBINED_DIR / "match_summary.csv"
+    df_summary.to_csv(summary_out, index=False)
+    print(f"Wrote {summary_out}")
+
     print("\n--- Per-quarter summary ---")
     print(f"{'Quarter':<9} {'Projects':>8} {'New':>5} {'Exact':>6} {'High':>5} {'Low':>5} "
           f"{'Removed':>8} {'RemMiss':>8} {'Vanish':>7} {'FlagOvr':>8}")
     print("-" * 80)
-    for q, n, c, o, ovr in summary:
-        print(f"{q:<9} {n:>8} {c['new'] + c['seed']:>5} {c['exact']:>6} {c['high']:>5} "
-              f"{c['low']:>5} {o.get('removed_ok', 0):>8} {o.get('removed_miss', 0):>8} "
-              f"{o.get('vanished', 0):>7} {ovr:>8}")
+    for s in summary:
+        print(f"{s['report_quarter']:<9} {s['projects']:>8} {s['new']:>5} {s['exact']:>6} "
+              f"{s['high']:>5} {s['low']:>5} {s['removed_matched']:>8} "
+              f"{s['removed_load_mismatch']:>8} {s['vanished']:>7} {s['flag_overrides']:>8}")
 
 
 if __name__ == "__main__":

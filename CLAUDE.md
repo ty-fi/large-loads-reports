@@ -232,10 +232,14 @@ Monotone OKLCh lightness 0.74 → 0.26 (oldest → newest, so the newest quarter
 stays darkest) with 240° of hue travel: green → teal → blue → purple → maroon.
 Chroma is requested at 0.19 and clamped into sRGB per step.
 
-### Vintage colors (gradient per stage, light to dark for new to old)
-- Technical Review: `#2E5F8A` → `#5B8DB8` → `#9BBDD8`
-- Request for Service: `#C4711A` → `#E8963A` → `#F4BF87`
-- Contract for Electric Service: `#2A7A55` → `#4CAF7D` → `#8ED4B0`
+### Vintage colors (one hue family per stage; New → 2-3 → 4+ runs dark → light)
+`VINTAGE_COLORS` in `generate_site.py` (also used by the removed-by-vintage
+bars on the Changes tab):
+- Technical Review (aqua): `#006337` → `#009655` → `#00cb75`
+- Request for Service (orange): `#913100` → `#d25117` → `#ff885c`
+- Contract for Electric Service (blue): `#0053a6` → `#3280de` → `#74b0ff`
+Validated with the dataviz skill's validator (see the comment there); re-run it
+before changing any step.
 
 ### Python environment
 - A `.venv` at the repo root has Python 3.13 + pandas + openpyxl + scipy. Use `.venv\Scripts\python.exe scripts/generate_site.py` to regenerate.

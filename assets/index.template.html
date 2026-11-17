@@ -87,6 +87,19 @@
   #info-panel strong { color: var(--text); }
   #info-panel a { color: var(--accent); text-decoration: none; }
   #info-panel a:hover { text-decoration: underline; }
+  .match-inventory { clear: both; margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
+  .match-inventory summary { cursor: pointer; font-weight: 600; color: var(--rmi-navy); }
+  .match-inventory p { margin: 8px 0; max-width: 980px; }
+  .match-table-wrap { overflow-x: auto; margin-top: 8px; }
+  .match-table { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .match-table th, .match-table td { padding: 4px 10px; text-align: right; border-bottom: 1px solid var(--border); }
+  .match-table th { font-size: 10.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; vertical-align: bottom; }
+  .match-table th.group { text-align: center; border-bottom: 1px solid #cbd5e1; }
+  .match-table td:first-child, .match-table th:first-child { text-align: left; }
+  .match-table td.diff { background: #fef3c7; color: #78350f; font-weight: 600; }
+  .match-table sup { color: var(--muted); font-weight: 600; }
+  .match-notes { margin: 8px 0 0; padding-left: 0; list-style: none; font-size: 12px; color: var(--muted); max-width: 980px; }
+  .match-notes li { margin-bottom: 4px; }
 
   /* ── Tabs ── */
   .tab-bar {
@@ -345,6 +358,26 @@
   <strong>Contract for Electric Service</strong>. MW figures reflect each project&#39;s
   announced load as reported each quarter.
   <span style="float:right; font-size:11px; color:var(--muted);">&#9432; Project IDs are persistent across quarters</span>
+
+  <details class="match-inventory">
+    <summary>How projects are matched across quarters</summary>
+    <p>
+      Project names are redacted in the filings, so each project is linked to its entry in the
+      previous quarter using what the filing reports about itself: which projects are new, which
+      were removed (and their load), and, for every continuing project, which of its load, ramp,
+      stage and in-service date changed, with the prior values listed on the change sheets. Each
+      quarter is solved as a single best-fit assignment.
+      <strong>Exact</strong>: every attribute agrees with the filing.
+      <strong>High</strong>: a minor disagreement, such as a segment relabel.
+      <strong>Low</strong>: a substantive attribute disagrees with what the filing reports.
+    </p>
+    <p>
+      The right-hand columns are the main check: the number of changes our matches imply, beside
+      the number the filing lists. Cells where they differ are highlighted.
+    </p>
+    <div class="match-table-wrap"><table class="match-table" id="match-table"></table></div>
+    <ul class="match-notes" id="match-notes"></ul>
+  </details>
 </div>
 
 <div class="tab-bar">
@@ -380,6 +413,14 @@
         </div>
       </div>
       <div class="pill-checkboxes" id="snap-segments"></div>
+    </div>
+    <div class="filter-group compact">
+      <label>Planning Years</label>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <select id="snap-year-lo" aria-label="First planning year"></select>
+        <span style="font-size:12px; color:var(--muted);">to</span>
+        <select id="snap-year-hi" aria-label="Last planning year"></select>
+      </div>
     </div>
     <div class="filter-group" id="snap-fc-group">
       <label>Load Forecasts</label>
@@ -624,6 +665,52 @@ const DEFAULT_LAYOUT = {
   if (el) el.textContent = QUARTER_RANGE;
 });
 
+// ── About panel: project-matching inventory ──────────────────────────────────
+// One row per quarter from outputs/combined/match_summary.csv. "x / y" cells
+// compare what the matching produced with what the filing itself reports, and
+// are highlighted where the two differ.
+function renderMatchInventory() {
+  const rows = DATA.match_summary || [];
+  const notes = DATA.match_notes || {};
+  const table = document.getElementById('match-table');
+  if (!table || !rows.length) return;
+  const noteQs = rows.map(r => r.report_quarter).filter(q => notes[q]);
+  const pair = (ours, filed) => {
+    if (ours == null || filed == null) return '<td>&ndash;</td>';
+    const cls = ours !== filed ? ' class="diff"' : '';
+    return `<td${cls}>${ours.toLocaleString()} / ${filed.toLocaleString()}</td>`;
+  };
+  const head = `
+    <thead>
+      <tr><th rowspan="2">Quarter</th><th rowspan="2">Projects</th>
+          <th class="group" colspan="3">Matched to prior quarter</th>
+          <th class="group" colspan="3">Entries and exits<br>(ours / filed)</th>
+          <th class="group" colspan="3">Changes<br>(implied / listed)</th></tr>
+      <tr><th>Exact</th><th>High</th><th>Low</th>
+          <th>New</th><th>Removed</th><th>Unexplained exits</th>
+          <th>Load</th><th>Date</th><th>Stage</th></tr>
+    </thead>`;
+  const body = rows.map(r => {
+    const q = r.report_quarter;
+    const mark = notes[q] ? `<sup>${noteQs.indexOf(q) + 1}</sup>` : '';
+    if (r.seed) {
+      return `<tr><td>${escHtml(q)}</td><td>${r.projects}</td>
+        <td colspan="9" style="text-align:left; color:var(--muted);">First quarter: every project gets a new ID</td></tr>`;
+    }
+    return `<tr><td>${escHtml(q)}${mark}</td><td>${r.projects}</td>
+      <td>${r.exact}</td><td>${r.high}</td><td>${r.low}</td>
+      ${pair(r.new, r.flagged_new)}${pair(r.removed_matched, r.removed_listed)}
+      <td${r.vanished ? ' class="diff"' : ''}>${r.vanished}</td>
+      ${pair(r.load_changes_implied, r.load_changes_listed)}
+      ${pair(r.date_changes_implied, r.date_changes_listed)}
+      ${pair(r.stage_changes_implied, r.stage_changes_listed)}</tr>`;
+  }).join('');
+  table.innerHTML = head + `<tbody>${body}</tbody>`;
+  document.getElementById('match-notes').innerHTML = noteQs
+    .map((q, i) => `<li><sup>${i + 1}</sup> <strong>${escHtml(q)}:</strong> ${escHtml(notes[q])}</li>`)
+    .join('');
+}
+
 // Index into VINTAGE_LABELS (["New (1 qtr)", "2-3 qtrs", "4+ qtrs"]). Note this is
 // NOT the Python vintage_bucket() index, which counts the other way (0 = 4+) and
 // goes through VINTAGE_IDX_TO_LABEL; mixing the two swaps New and 4+.
@@ -769,7 +856,9 @@ function renderSnapshot(opts) {
   const { traces: allTraces, layout } = buildSnapshotFigure(quarter, stages, segments, animate);
 
   // Subtitle
-  const stageFiltered = D.filter(r => r.report_quarter === quarter && stages.includes(r.project_stage) && segments.includes(r.segment));
+  const [yrLo, yrHi] = snapYearRange();
+  const stageFiltered = D.filter(r => r.report_quarter === quarter && stages.includes(r.project_stage) &&
+    segments.includes(r.segment) && r.planning_year >= yrLo && r.planning_year <= yrHi);
   const totalMw = {};
   stageFiltered.forEach(r => { totalMw[r.planning_year] = (totalMw[r.planning_year] || 0) + r.load_mw; });
   const peak = getPeakStats(totalMw);
@@ -814,10 +903,13 @@ function buildSnapshotFigure(quarter, stages, segments, lockY) {
     grouped[key][r.project_stage] += r.load_mw;
   });
 
-  // Always use full year range for consistent x-axis across animation frames
+  // The selected planning-year range applies to every quarter, so the x-axis
+  // stays fixed across animation frames.
+  const [yrLo, yrHi] = snapYearRange();
+  const years = YEARS.filter(y => y >= yrLo && y <= yrHi);
   const traces = STAGES.slice().reverse().map(stage => ({
-    x: YEARS,
-    y: YEARS.map(y => (grouped[y] && grouped[y][stage]) || 0),
+    x: years,
+    y: years.map(y => (grouped[y] && grouped[y][stage]) || 0),
     name: stage,
     type: 'bar',
     marker: { color: STAGE_COLORS[stage] },
@@ -835,7 +927,8 @@ function buildSnapshotFigure(quarter, stages, segments, lockY) {
   };
   if (animate) {
     const finalQ = ALL_QUARTERS[ALL_QUARTERS.length - 1];
-    const finalData = D.filter(r => r.report_quarter === finalQ && stages.includes(r.project_stage) && segments.includes(r.segment));
+    const finalData = D.filter(r => r.report_quarter === finalQ && stages.includes(r.project_stage) &&
+      segments.includes(r.segment) && r.planning_year >= yrLo && r.planning_year <= yrHi);
     const byYear = {};
     finalData.forEach(r => { byYear[r.planning_year] = (byYear[r.planning_year] || 0) + r.load_mw; });
     const finalMax = Math.max(0, ...Object.values(byYear));
@@ -858,6 +951,7 @@ function buildSnapshotFigure(quarter, stages, segments, lockY) {
       tickpad: 8,
       showgrid: false,
       showline: true, linecolor: '#e2e8f0',
+      range: [yrLo - 0.5, yrHi + 0.5], autorange: false,
     },
     yaxis: yaxisOpts,
     legend: { orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1, font: { family: FONT_REGULAR, size: 12 } },
@@ -865,7 +959,22 @@ function buildSnapshotFigure(quarter, stages, segments, lockY) {
     height: 480,
   };
 
-  return { traces: addForecastTraces(traces, 'snap'), layout };
+  // Clip forecast overlays to the same range, so out-of-range points can't
+  // stretch the y-axis.
+  const allTraces = addForecastTraces(traces, 'snap').map(t => {
+    if (t.type === 'bar' || !Array.isArray(t.x)) return t;
+    const keep = t.x.map(x => x >= yrLo && x <= yrHi);
+    return { ...t, x: t.x.filter((_, i) => keep[i]), y: t.y.filter((_, i) => keep[i]) };
+  });
+  return { traces: allTraces, layout };
+}
+
+// Planning-year range chosen on the Snapshot tab (defaults to every year).
+function snapYearRange() {
+  const lo = parseInt(document.getElementById('snap-year-lo').value);
+  const hi = parseInt(document.getElementById('snap-year-hi').value);
+  if (isNaN(lo) || isNaN(hi)) return [YEARS[0], YEARS[YEARS.length - 1]];
+  return [Math.min(lo, hi), Math.max(lo, hi)];
 }
 
 // ── Animation controller ─────────────────────────────────────────────────────
@@ -1664,6 +1773,20 @@ function snapFilterChange() { stopAnimation(); renderSnapshot(); }
 buildSelect('snap-quarter', QUARTERS, snapFilterChange, LATEST_QUARTER);
 buildCheckboxes('snap-stages', STAGES, STAGES, snapFilterChange);
 buildCheckboxes('snap-segments', SEGMENTS, SEGMENTS, snapFilterChange);
+(function initSnapYears() {
+  const lo = document.getElementById('snap-year-lo');
+  const hi = document.getElementById('snap-year-hi');
+  const last = YEARS[YEARS.length - 1];
+  lo.innerHTML = YEARS.map(y => `<option value="${y}" ${y === YEARS[0] ? 'selected' : ''}>${y}</option>`).join('');
+  hi.innerHTML = YEARS.map(y => `<option value="${y}" ${y === last ? 'selected' : ''}>${y}</option>`).join('');
+  const onChange = () => {
+    // Keep From <= To by swapping, as the Evolution tab does.
+    if (parseInt(lo.value) > parseInt(hi.value)) { const t = lo.value; lo.value = hi.value; hi.value = t; }
+    snapFilterChange();
+  };
+  lo.addEventListener('change', onChange);
+  hi.addEventListener('change', onChange);
+})();
 document.getElementById('snap-seg-all').addEventListener('click', () => { setAll('snap-segments', true); snapFilterChange(); });
 document.getElementById('snap-seg-none').addEventListener('click', () => { setAll('snap-segments', false); snapFilterChange(); });
 document.getElementById('snap-stage-all').addEventListener('click', () => { setAll('snap-stages', true); snapFilterChange(); });
@@ -1744,6 +1867,7 @@ document.getElementById('vint-export').addEventListener('click', () => {
 });
 
 // ── Initial render ───────────────────────────────────────────────────────────
+renderMatchInventory();
 renderSnapshot();
 </script>
 </body>
