@@ -1,6 +1,5 @@
 """
-Normalize Large Load Economic Development Report Excel workbooks and Q1 2026 CSVs
-into two combined datasets:
+Normalize Large Load Economic Development Report Excel workbooks into two combined datasets:
   - pipeline_snapshot.csv : total MW by (report_quarter, project_stage, planning_year)
   - pipeline_changes.csv  : per-quarter change metrics (additions, removals, etc.)
 """
@@ -15,7 +14,6 @@ SCRIPT_DIR = Path(__file__).parent
 INPUTS_DIR = SCRIPT_DIR.parent / "inputs"
 OUTPUTS_DIR = SCRIPT_DIR.parent / "outputs"
 WORKBOOKS_DIR = INPUTS_DIR / "workbooks"
-CSV_2026Q1_DIR = INPUTS_DIR / "2026Q1"
 COMBINED_DIR = OUTPUTS_DIR / "combined"
 
 STAGE_ALIASES = {
@@ -359,95 +357,6 @@ def process_excel(xlsx_path: Path, quarter: str) -> tuple[list[dict], dict]:
 
 
 # ---------------------------------------------------------------------------
-# Q1 2026 CSV ingestion
-# ---------------------------------------------------------------------------
-
-def process_2026q1_csvs() -> tuple[list[dict], dict]:
-    quarter = "2026Q1"
-    print(f"  Reading Q1 2026 CSVs from {CSV_2026Q1_DIR}")
-
-    df_main = pd.read_csv(CSV_2026Q1_DIR / "pipeline_main.csv")
-    # Year columns may be "2026" or "Load_2026" — detect both patterns
-    year_cols = {}  # col_name -> year int
-    for c in df_main.columns:
-        m = re.search(r'(\d{4})$', c)
-        if m:
-            yr = int(m.group(1))
-            if 2020 <= yr <= 2040:
-                year_cols[c] = yr
-    stage_col = next((c for c in df_main.columns if "stage" in c.lower()), None)
-    if stage_col is None:
-        print("    WARNING: no stage column in pipeline_main.csv")
-        return [], {}
-
-    snapshot_rows = []
-    for _, row in df_main.iterrows():
-        stage = normalize_stage(row[stage_col])
-        if not stage:
-            continue
-        for yr_col, yr in year_cols.items():
-            try:
-                mw = float(row[yr_col]) if pd.notna(row[yr_col]) else 0.0
-            except (TypeError, ValueError):
-                mw = 0.0
-            snapshot_rows.append({
-                "report_quarter": quarter,
-                "project_stage": stage,
-                "planning_year": yr,
-                "load_mw": mw,
-            })
-    print(f"    Main: {len(snapshot_rows)} project-year rows")
-
-    def _count_mw(filename, mw_col_hint):
-        path = CSV_2026Q1_DIR / filename
-        if not path.exists():
-            return 0, 0.0
-        df = pd.read_csv(path)
-        mw_col = next((c for c in df.columns if mw_col_hint.lower() in c.lower()), None)
-        count = len(df.dropna(subset=[df.columns[0]]))
-        total = df[mw_col].apply(pd.to_numeric, errors='coerce').sum() if mw_col else 0.0
-        return count, float(total)
-
-    added_count, added_mw = _count_mw("new_projects.csv", "load")
-    removed_count, removed_mw = _count_mw("pipeline_exits.csv", "load")
-
-    load_change_net = 0.0
-    lc_path = CSV_2026Q1_DIR / "load_changes.csv"
-    if lc_path.exists():
-        df_lc = pd.read_csv(lc_path)
-        change_col = next((c for c in df_lc.columns if "change" in c.lower()), None)
-        if change_col:
-            load_change_net = float(df_lc[change_col].apply(pd.to_numeric, errors='coerce').sum())
-
-    avg_delay = 0.0
-    sd_path = CSV_2026Q1_DIR / "service_date_changes.csv"
-    if sd_path.exists():
-        df_sd = pd.read_csv(sd_path)
-        delay_col = next((c for c in df_sd.columns if "month" in c.lower() or "change" in c.lower()), None)
-        if delay_col:
-            vals = df_sd[delay_col].apply(pd.to_numeric, errors='coerce').dropna()
-            avg_delay = float(vals.mean()) if len(vals) else 0.0
-
-    stage_changes = 0
-    sc_path = CSV_2026Q1_DIR / "stage_changes.csv"
-    if sc_path.exists():
-        df_sc = pd.read_csv(sc_path)
-        stage_changes = len(df_sc.dropna(subset=[df_sc.columns[0]]))
-
-    change_metrics = {
-        "report_quarter": quarter,
-        "added_projects": added_count,
-        "added_mw": added_mw,
-        "removed_projects": removed_count,
-        "removed_mw": removed_mw,
-        "load_change_net_mw": load_change_net,
-        "stage_changes_count": stage_changes,
-        "avg_delay_months": round(avg_delay, 2),
-    }
-    return snapshot_rows, change_metrics
-
-
-# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -474,12 +383,6 @@ def main():
         snap_rows, change_metrics = process_excel(xlsxs[0], quarter)
         all_snapshot_rows.extend(snap_rows)
         all_change_metrics.append(change_metrics)
-
-    # Process Q1 2026 CSVs
-    print(f"\n[2026Q1]")
-    snap_rows, change_metrics = process_2026q1_csvs()
-    all_snapshot_rows.extend(snap_rows)
-    all_change_metrics.append(change_metrics)
 
     # Build pipeline_snapshot.csv — aggregate by (quarter, stage, year)
     df_snap = pd.DataFrame(all_snapshot_rows)

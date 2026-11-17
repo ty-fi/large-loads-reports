@@ -21,7 +21,6 @@ Interactive web dashboard for Georgia Power's large load pipeline data, sourced 
 ```
 inputs/
   ├── workbooks/             # Raw Excel files per quarter (scraped)
-  ├── 2026Q1/                # Q1 2026 manual CSVs (no Excel was filed)
   └── GPC_Load_Forecasts.csv # Reference forecast series
          │
          ▼
@@ -46,11 +45,10 @@ index.html                   # Deployable — GitHub Pages ready
 | Script | Purpose |
 |--------|---------|
 | `scripts/scrape_workbooks.py` | Downloads quarterly Excel report files |
-| `scripts/build_dataset.py` | Parses Excel/CSV → normalized combined datasets |
+| `scripts/build_dataset.py` | Parses Excel workbooks → normalized combined datasets |
 | `scripts/assign_project_ids.py` | Assigns persistent IDs to track projects across quarters |
 | `scripts/generate_site.py` | Generates `index.html` with embedded JSON from template |
 | `scripts/app.py` | Plotly Dash app (live server, same 4-tab layout) |
-| `scripts/spot_check.py` / `spot_check2.py` | Validation scripts |
 
 ## File Structure
 
@@ -61,7 +59,6 @@ large-loads-reports/
 │   ├── index.template.html   # Source template for index.html
 │   └── rmi_logo_horitzontal_no_tagline.svg
 ├── inputs/
-│   ├── 2026Q1/               # Q1 2026 manual CSVs (no Excel was filed)
 │   ├── workbooks/            # Quarterly Excel files
 │   └── GPC_Load_Forecasts.csv # Reference forecast series
 ├── outputs/

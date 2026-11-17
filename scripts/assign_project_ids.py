@@ -3,7 +3,7 @@ assign_project_ids.py
 
 Tracks individual large load projects across quarterly GA PSC Docket 55378 reports.
 Project names are redacted, so identity is inferred from each filing's own
-bookkeeping, which reconciles exactly in every quarter but one:
+bookkeeping, which reconciles exactly in every quarter but two:
 
     previous projects - Removed Projects + (New Project? = Y) == current projects
 
@@ -33,7 +33,6 @@ SCRIPT_DIR = Path(__file__).parent
 INPUTS_DIR = SCRIPT_DIR.parent / "inputs"
 OUTPUTS_DIR = SCRIPT_DIR.parent / "outputs"
 WORKBOOKS_DIR = INPUTS_DIR / "workbooks"
-CSV_2026Q1_DIR = INPUTS_DIR / "2026Q1"
 COMBINED_DIR = OUTPUTS_DIR / "combined"
 
 QUARTER_ORDER = ["2024Q1", "2024Q2", "2024Q3", "2024Q4",
@@ -386,143 +385,6 @@ def parse_excel_removed(ws):
     return result
 
 
-# ── Q1 2026 CSV parsers ───────────────────────────────────────────────────────
-
-def parse_csv_main(quarter):
-    df = pd.read_csv(CSV_2026Q1_DIR / "pipeline_main.csv")
-    year_cols = {c: int(re.search(r'(\d{4})$', c).group(1))
-                 for c in df.columns if re.search(r'(\d{4})$', c) and
-                 2020 <= int(re.search(r'(\d{4})$', c).group(1)) <= 2040}
-
-    stage_col = next((c for c in df.columns if 'stage' in c.lower()), None)
-    load_col  = next((c for c in df.columns if 'announced_load' in c.lower()), None)
-    date_col  = next((c for c in df.columns if 'service_date' in c.lower()), None)
-    seg_col   = next((c for c in df.columns if c.lower() == 'segment'), None)
-    class_col = next((c for c in df.columns if 'facility_type' in c.lower() or c.lower() == 'class'), None)
-    terr_col  = next((c for c in df.columns if 'territory' in c.lower()), None)
-
-    flag_map = {
-        'new_project':                 next((c for c in df.columns if 'new_project' in c.lower()), None),
-        'change_announced_load':       next((c for c in df.columns if 'change_announced' in c.lower()), None),
-        'change_load_ramp':            next((c for c in df.columns if 'change_load_ramp' in c.lower()), None),
-        'change_project_stage':        next((c for c in df.columns if 'change_project_stage' in c.lower()), None),
-        'change_initial_service_date': next((c for c in df.columns if 'change_initial' in c.lower()), None),
-    }
-
-    projects = []
-    for _, row in df.iterrows():
-        stage = norm_stage(row[stage_col] if stage_col else None)
-        if not stage:
-            continue
-
-        ramp = {}
-        for col, yr in year_cols.items():
-            try:
-                ramp[yr] = float(row[col]) if pd.notna(row[col]) else 0.0
-            except (TypeError, ValueError):
-                ramp[yr] = 0.0
-
-        def get_flag(k):
-            col = flag_map.get(k)
-            if col is None:
-                return ""
-            v = row[col]
-            return norm_flag(v) if pd.notna(v) else ""
-
-        projects.append({
-            'segment':    norm_segment(str(row[seg_col]).strip() if seg_col and pd.notna(row[seg_col]) else ""),
-            'class_type': str(row[class_col]).strip() if class_col and pd.notna(row[class_col]) else "",
-            'territory':  str(row[terr_col]).strip() if terr_col and pd.notna(row[terr_col]) else "",
-            'project_stage': stage,
-            'announced_load': norm_load(row[load_col] if load_col else None),
-            'initial_service_date': norm_date(row[date_col] if date_col else None),
-            'ramp': ramp,
-            'new_project':                   get_flag('new_project'),
-            'change_announced_load':         get_flag('change_announced_load'),
-            'change_load_ramp':              get_flag('change_load_ramp'),
-            'change_project_stage':          get_flag('change_project_stage'),
-            'change_initial_service_date':   get_flag('change_initial_service_date'),
-        })
-    return projects
-
-def parse_csv_load_changes():
-    df = pd.read_csv(CSV_2026Q1_DIR / "load_changes.csv")
-    result = []
-    prev_col = next((c for c in df.columns if 'q4_2025' in c.lower() and 'load' in c.lower()), None)
-    new_col  = next((c for c in df.columns if 'q1_2026' in c.lower() and 'load' in c.lower()), None)
-    if prev_col and new_col:
-        for _, row in df.iterrows():
-            p, n = norm_load(row[prev_col]), norm_load(row[new_col])
-            if p is not None and n is not None and p != n:
-                result.append((p, n))
-    return result
-
-def parse_csv_date_changes():
-    df = pd.read_csv(CSV_2026Q1_DIR / "service_date_changes.csv")
-    result = []
-    prev_col = next((c for c in df.columns if 'q4_2025' in c.lower() and 'date' in c.lower()), None)
-    new_col  = next((c for c in df.columns if 'q1_2026' in c.lower() and 'date' in c.lower()), None)
-    if prev_col and new_col:
-        for _, row in df.iterrows():
-            p, n = norm_date(row[prev_col]), norm_date(row[new_col])
-            if p and n and p != n:
-                result.append((p, n))
-    return result
-
-def parse_csv_removed():
-    df = pd.read_csv(CSV_2026Q1_DIR / "pipeline_exits.csv")
-    load_col   = next((c for c in df.columns if 'announced_load' in c.lower()), None)
-    reason_col = next((c for c in df.columns if 'reason' in c.lower()), None)
-    result = []
-    if load_col:
-        for _, row in df.iterrows():
-            load   = norm_load(row[load_col])
-            reason = str(row[reason_col]).strip() if reason_col and pd.notna(row[reason_col]) else ""
-            if load is not None:
-                result.append((load, reason))
-    return result
-
-
-def parse_csv_stage_changes():
-    path = CSV_2026Q1_DIR / "stage_changes.csv"
-    if not path.exists():
-        return []
-    df = pd.read_csv(path)
-    prev_col = next((c for c in df.columns if 'q4_2025' in c.lower() and 'stage' in c.lower()), None)
-    new_col  = next((c for c in df.columns if 'q1_2026' in c.lower() and 'stage' in c.lower()), None)
-    result = []
-    if prev_col and new_col:
-        for _, row in df.iterrows():
-            p, n = norm_stage(row[prev_col]), norm_stage(row[new_col])
-            if p and n:
-                result.append((p, n))
-    return result
-
-def parse_csv_ramp_changes():
-    path = CSV_2026Q1_DIR / "load_ramp_comparison.csv"
-    if not path.exists():
-        return []
-    df = pd.read_csv(path)
-    new_cols  = {c: int(c[-4:]) for c in df.columns if re.fullmatch(r'Q1_2026_\d{4}', c)}
-    prev_cols = {c: int(c[-4:]) for c in df.columns if re.fullmatch(r'Q4_2025_\d{4}', c)}
-    result = []
-    for _, row in df.iterrows():
-        new_ramp  = {yr: _num(row[c]) if pd.notna(row[c]) else 0.0 for c, yr in new_cols.items()}
-        prev_ramp = {yr: _num(row[c]) if pd.notna(row[c]) else 0.0 for c, yr in prev_cols.items()}
-        result.append((prev_ramp, new_ramp))
-    return result
-
-def parse_csv_added():
-    path = CSV_2026Q1_DIR / "new_projects.csv"
-    if not path.exists():
-        return []
-    df = pd.read_csv(path)
-    load_col = next((c for c in df.columns if 'load' in c.lower()), None)
-    if not load_col:
-        return []
-    return [l for l in (norm_load(v) for v in df[load_col]) if l is not None]
-
-
 # ── Similarity ────────────────────────────────────────────────────────────────
 
 def ramp_sim(ramp1, ramp2):
@@ -552,8 +414,9 @@ def ramp_equal(ramp1, ramp2, tol=0.5):
 #
 # Each filing is internally consistent: in every quarter,
 #     prev_count - |Removed Projects| + |New Project? = Y| == current_count
-# (2026Q3 is off by one: a 216 MW project is flagged new but is not on the
-# Projects Added sheet). So matching is a 1:1 assignment between last quarter's
+# (2026Q1 and 2026Q3 are each off by one on the same 216 MW project: Q1's Main
+# sheet omits its new flag though Projects Added lists it; Q3 flags it new
+# again though Projects Added does not). So matching is a 1:1 assignment between last quarter's
 # projects and this quarter's, where each project's own change flags say which
 # attributes may differ, and the change sheets say what they used to be.
 #
@@ -716,19 +579,6 @@ def load_excel_quarter(quarter):
     return projects, sheets
 
 
-def load_csv_quarter(quarter):
-    projects = parse_csv_main(quarter)
-    sheets = {
-        'load':    parse_csv_load_changes(),
-        'date':    parse_csv_date_changes(),
-        'ramp':    parse_csv_ramp_changes(),
-        'stage':   parse_csv_stage_changes(),
-        'removed': parse_csv_removed(),
-        'added':   parse_csv_added(),
-    }
-    return projects, sheets
-
-
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def _record(proj):
@@ -767,13 +617,10 @@ def main():
 
     for quarter in QUARTER_ORDER:
         print(f"\n[{quarter}]")
-        if quarter == "2026Q1":
-            projects, sheets = load_csv_quarter(quarter)
-        else:
-            projects, sheets = load_excel_quarter(quarter)
-            if projects is None:
-                print("  Skipping — no workbook found")
-                continue
+        projects, sheets = load_excel_quarter(quarter)
+        if projects is None:
+            print("  Skipping — no workbook found")
+            continue
 
         flagged = sum(p['new_project'] == 'Y' for p in projects)
         print(f"  {len(projects)} projects in Main sheet ({flagged} flagged new)")

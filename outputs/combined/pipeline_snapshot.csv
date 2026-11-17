@@ -353,7 +353,7 @@ report_quarter,project_stage,planning_year,load_mw
 2025Q4,Technical Review,2035,53941.3
 2025Q4,Technical Review,2036,53941.3
 2025Q4,Technical Review,2037,54042.8
-2026Q1,Contract for Electric Service,2026,1912.0
+2026Q1,Contract for Electric Service,2026,1911.6
 2026Q1,Contract for Electric Service,2027,4615.0
 2026Q1,Contract for Electric Service,2028,7233.0
 2026Q1,Contract for Electric Service,2029,9102.0
@@ -366,29 +366,29 @@ report_quarter,project_stage,planning_year,load_mw
 2026Q1,Contract for Electric Service,2036,9572.0
 2026Q1,Contract for Electric Service,2037,9572.0
 2026Q1,Request for Service,2026,0.0
-2026Q1,Request for Service,2027,31.0
-2026Q1,Request for Service,2028,523.0
-2026Q1,Request for Service,2029,944.0
-2026Q1,Request for Service,2030,1757.0
-2026Q1,Request for Service,2031,2225.0
-2026Q1,Request for Service,2032,2742.0
-2026Q1,Request for Service,2033,2785.0
-2026Q1,Request for Service,2034,2785.0
-2026Q1,Request for Service,2035,2785.0
-2026Q1,Request for Service,2036,2785.0
-2026Q1,Request for Service,2037,2785.0
+2026Q1,Request for Service,2027,31.417
+2026Q1,Request for Service,2028,523.287
+2026Q1,Request for Service,2029,943.587
+2026Q1,Request for Service,2030,1757.792
+2026Q1,Request for Service,2031,2225.792
+2026Q1,Request for Service,2032,2742.479
+2026Q1,Request for Service,2033,2785.479
+2026Q1,Request for Service,2034,2785.479
+2026Q1,Request for Service,2035,2785.479
+2026Q1,Request for Service,2036,2785.479
+2026Q1,Request for Service,2037,2785.479
 2026Q1,Technical Review,2026,0.0
-2026Q1,Technical Review,2027,3011.0
-2026Q1,Technical Review,2028,15823.0
-2026Q1,Technical Review,2029,29033.0
-2026Q1,Technical Review,2030,40775.0
-2026Q1,Technical Review,2031,49880.0
-2026Q1,Technical Review,2032,56127.0
-2026Q1,Technical Review,2033,58467.0
-2026Q1,Technical Review,2034,59589.0
-2026Q1,Technical Review,2035,60672.0
-2026Q1,Technical Review,2036,60672.0
-2026Q1,Technical Review,2037,60762.0
+2026Q1,Technical Review,2027,3009.7
+2026Q1,Technical Review,2028,15821.2
+2026Q1,Technical Review,2029,29032.2
+2026Q1,Technical Review,2030,40773.8
+2026Q1,Technical Review,2031,49879.0
+2026Q1,Technical Review,2032,56125.8
+2026Q1,Technical Review,2033,58466.3
+2026Q1,Technical Review,2034,59587.8
+2026Q1,Technical Review,2035,60671.3
+2026Q1,Technical Review,2036,60671.3
+2026Q1,Technical Review,2037,60772.8
 2026Q2,Contract for Electric Service,2025,870.0
 2026Q2,Contract for Electric Service,2026,1851.6
 2026Q2,Contract for Electric Service,2027,4355.0
